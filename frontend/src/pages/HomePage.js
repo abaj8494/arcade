@@ -69,10 +69,18 @@ const HomePage = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            <div className="aspect-w-4 aspect-h-3 mb-3 bg-gray-700 rounded-md overflow-hidden">
-              <div className="flex items-center justify-center h-full text-4xl">
-                {game.name.charAt(0)}
-              </div>
+            <div className="aspect-w-4 aspect-h-3 mb-3 bg-gray-100 rounded-md overflow-hidden">
+              {game.image ? (
+                <img 
+                  src={game.image} 
+                  alt={game.name} 
+                  className="object-contain h-full w-full p-2"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-4xl bg-gray-700">
+                  {game.name.charAt(0)}
+                </div>
+              )}
             </div>
             <h3 className="text-lg font-semibold mb-1">{game.name}</h3>
             <p className="text-sm text-gray-400">
