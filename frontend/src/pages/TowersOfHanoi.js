@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 
+// Use the correct API URL based on the environment
+const API_URL = window.location.hostname === 'arcade.abaj.ai' 
+  ? 'https://arcade.abaj.ai/api' 
+  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const TowersOfHanoi = () => {
   const [numDiscs, setNumDiscs] = useState(3);
   const [towers, setTowers] = useState([[], [], []]);
@@ -45,7 +50,7 @@ const TowersOfHanoi = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.get(`http://localhost:5000/api/games/towers-of-hanoi/solve?discs=${numDiscs}`);
+      const response = await axios.get(`${API_URL}/games/towers-of-hanoi/solve?discs=${numDiscs}`);
       setMoves(response.data.moves);
       setLoading(false);
       setSolving(true);
@@ -54,6 +59,7 @@ const TowersOfHanoi = () => {
       // Start the animation
       animateSolution(response.data.moves);
     } catch (err) {
+      console.error('Error solving towers:', err);
       setLoading(false);
       setError('Failed to load solution. Please try again.');
     }

@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 
+// Use the correct API URL based on the environment
+const API_URL = window.location.hostname === 'arcade.abaj.ai' 
+  ? 'https://arcade.abaj.ai/api' 
+  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const HomePage = () => {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,10 +17,11 @@ const HomePage = () => {
   useEffect(() => {
     const fetchGames = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/games');
+        const response = await axios.get(`${API_URL}/games`);
         setGames(response.data);
         setLoading(false);
       } catch (err) {
+        console.error('Error fetching games:', err);
         setError('Failed to load games. Please try again later.');
         setLoading(false);
       }

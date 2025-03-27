@@ -13,7 +13,7 @@ const Navbar = () => {
             Games
           </Link>
           <a 
-            href="https://github.com/yourusername/arcade" 
+            href="https://github.com/abaj8494/arcade" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-white hover:text-secondary"
