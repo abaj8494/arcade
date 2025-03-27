@@ -1,0 +1,82 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import axios from 'axios';
+
+const HomePage = () => {
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchGames = async () => {
+      try {
+        const response = await axios.get('http://localhost:5000/api/games');
+        setGames(response.data);
+        setLoading(false);
+      } catch (err) {
+        setError('Failed to load games. Please try again later.');
+        setLoading(false);
+      }
+    };
+
+    fetchGames();
+  }, []);
+
+  const handleGameClick = (gameId) => {
+    navigate(`/game/${gameId}`);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8 text-red-500">
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-4 btn btn-primary"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold mb-8 text-center">Arcade Games</h1>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {games.map((game) => (
+          <motion.div
+            key={game.id}
+            className="game-card"
+            onClick={() => handleGameClick(game.id)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <div className="aspect-w-4 aspect-h-3 mb-3 bg-gray-700 rounded-md overflow-hidden">
+              <div className="flex items-center justify-center h-full text-4xl">
+                {game.name.charAt(0)}
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold mb-1">{game.name}</h3>
+            <p className="text-sm text-gray-400">
+              {game.implemented ? 'Ready to Play' : 'Coming Soon'}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default HomePage; 
