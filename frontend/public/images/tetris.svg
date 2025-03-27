@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" fill="#f0f0f0" rx="15" ry="15"/>
+  
+  <!-- Grid background -->
+  <rect x="25" y="15" width="50" height="70" fill="#2C3E50" rx="4" ry="4"/>
+  
+  <!-- T-Block (Purple) -->
+  <rect x="40" y="20" width="10" height="10" fill="#9B59B6" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="30" y="30" width="10" height="10" fill="#9B59B6" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="40" y="30" width="10" height="10" fill="#9B59B6" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="50" y="30" width="10" height="10" fill="#9B59B6" stroke="#ECF0F1" stroke-width="1"/>
+  
+  <!-- I-Block (Cyan) -->
+  <rect x="40" y="45" width="10" height="10" fill="#1ABC9C" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="50" y="45" width="10" height="10" fill="#1ABC9C" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="60" y="45" width="10" height="10" fill="#1ABC9C" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="70" y="45" width="10" height="10" fill="#1ABC9C" stroke="#ECF0F1" stroke-width="1"/>
+  
+  <!-- L-Block (Orange) -->
+  <rect x="30" y="60" width="10" height="10" fill="#E67E22" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="30" y="70" width="10" height="10" fill="#E67E22" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="40" y="70" width="10" height="10" fill="#E67E22" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="50" y="70" width="10" height="10" fill="#E67E22" stroke="#ECF0F1" stroke-width="1"/>
+  
+  <!-- O-Block (Yellow) -->
+  <rect x="60" y="60" width="10" height="10" fill="#F1C40F" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="70" y="60" width="10" height="10" fill="#F1C40F" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="60" y="70" width="10" height="10" fill="#F1C40F" stroke="#ECF0F1" stroke-width="1"/>
+  <rect x="70" y="70" width="10" height="10" fill="#F1C40F" stroke="#ECF0F1" stroke-width="1"/>
+</svg> 
