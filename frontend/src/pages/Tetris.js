@@ -6,13 +6,13 @@ const BOARD_HEIGHT = 20;
 const CELL_SIZE = 28;
 
 const PIECES = {
-  I: { shape: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], color: '#00f0f0' },
-  O: { shape: [[1,1], [1,1]], color: '#f0f000' },
-  T: { shape: [[0,1,0], [1,1,1], [0,0,0]], color: '#a000f0' },
-  S: { shape: [[0,1,1], [1,1,0], [0,0,0]], color: '#00f000' },
-  Z: { shape: [[1,1,0], [0,1,1], [0,0,0]], color: '#f00000' },
-  J: { shape: [[1,0,0], [1,1,1], [0,0,0]], color: '#0000f0' },
-  L: { shape: [[0,0,1], [1,1,1], [0,0,0]], color: '#f0a000' },
+  I: { shape: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], colour: '#00f0f0' },
+  O: { shape: [[1,1], [1,1]], colour: '#f0f000' },
+  T: { shape: [[0,1,0], [1,1,1], [0,0,0]], colour: '#a000f0' },
+  S: { shape: [[0,1,1], [1,1,0], [0,0,0]], colour: '#00f000' },
+  Z: { shape: [[1,1,0], [0,1,1], [0,0,0]], colour: '#f00000' },
+  J: { shape: [[1,0,0], [1,1,1], [0,0,0]], colour: '#0000f0' },
+  L: { shape: [[0,0,1], [1,1,1], [0,0,0]], colour: '#f0a000' },
 };
 
 const PIECE_NAMES = Object.keys(PIECES);
@@ -82,7 +82,7 @@ const Tetris = () => {
           const boardY = pos.y + y;
           const boardX = pos.x + x;
           if (boardY >= 0 && boardY < BOARD_HEIGHT) {
-            newBoard[boardY][boardX] = piece.color;
+            newBoard[boardY][boardX] = piece.colour;
           }
         }
       }
@@ -338,7 +338,7 @@ const Tetris = () => {
             const boardY = currentPos.y + y;
             const boardX = currentPos.x + x;
             if (boardY >= 0 && boardY < BOARD_HEIGHT) {
-              displayBoard[boardY][boardX] = currentPiece.color;
+              displayBoard[boardY][boardX] = currentPiece.colour;
             }
           }
         }
@@ -359,7 +359,7 @@ const Tetris = () => {
               key={`${y}-${x}`}
               className="w-5 h-5 rounded-sm"
               style={{
-                backgroundColor: cell ? nextPiece.color : 'transparent',
+                backgroundColor: cell ? nextPiece.colour : 'transparent',
                 border: cell ? '1px solid rgba(255,255,255,0.3)' : 'none'
               }}
             />

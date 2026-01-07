@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
@@ -92,9 +92,14 @@ const Hashiwokakero = () => {
   const [selectedIsland, setSelectedIsland] = useState(null);
   const [isSolved, setIsSolved] = useState(false);
   const [solving, setSolving] = useState(false);
+  const [error, setError] = useState(null);
+  const solveIntervalRef = useRef(null);
 
   // Initialize puzzle
   const initPuzzle = useCallback((diff) => {
+    if (solveIntervalRef.current) {
+      clearInterval(solveIntervalRef.current);
+    }
     const puzzle = PUZZLES[diff];
     setGridSize(puzzle.size);
     setIslands(puzzle.islands.map((island, idx) => ({
@@ -106,6 +111,7 @@ const Hashiwokakero = () => {
     setSelectedIsland(null);
     setIsSolved(false);
     setSolving(false);
+    setError(null);
   }, []);
 
   useEffect(() => {
@@ -113,7 +119,7 @@ const Hashiwokakero = () => {
   }, [difficulty, initPuzzle]);
 
   // Find nearest island in a direction
-  const findNeighbor = useCallback((island, direction) => {
+  const findNeighbour = useCallback((island, direction) => {
     let nearest = null;
     let minDist = Infinity;
 
@@ -224,10 +230,12 @@ const Hashiwokakero = () => {
 
   // Count bridges for an island
   const countBridges = useCallback((islandId) => {
+    if (!bridges || !Array.isArray(bridges)) return 0;
     let count = 0;
     for (const bridge of bridges) {
+      if (!bridge || !bridge.from || !bridge.to) continue;
       if (bridge.from.id === islandId || bridge.to.id === islandId) {
-        count += bridge.count;
+        count += (bridge.count || 0);
       }
     }
     return count;
@@ -259,8 +267,8 @@ const Hashiwokakero = () => {
         ? (toIsland.y > fromIsland.y ? 'down' : 'up')
         : (toIsland.x > fromIsland.x ? 'right' : 'left');
 
-      const neighbor = findNeighbor(fromIsland, direction);
-      if (!neighbor || neighbor.id !== toIsland.id) {
+      const neighbourIsland = findNeighbour(fromIsland, direction);
+      if (!neighbourIsland || neighbourIsland.id !== toIsland.id) {
         setSelectedIsland(null);
         return;
       }
@@ -324,28 +332,327 @@ const Hashiwokakero = () => {
 
   // Check if puzzle is solved
   useEffect(() => {
-    if (islands.length === 0) return;
+    if (!islands || !Array.isArray(islands) || islands.length === 0) return;
+    if (!bridges || !Array.isArray(bridges) || bridges.length === 0) return;
 
-    const allSatisfied = islands.every(island =>
-      countBridges(island.id) === island.bridges
-    );
+    try {
+      const allSatisfied = islands.every(island =>
+        island && typeof island.id === 'number' && countBridges(island.id) === island.bridges
+      );
 
-    if (allSatisfied && bridges.length > 0) {
-      // TODO: Check connectivity
-      setIsSolved(true);
+      if (allSatisfied) {
+        // Check connectivity using BFS
+        const visited = new Set();
+        const queue = [islands[0].id];
+        visited.add(islands[0].id);
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+          for (const bridge of bridges) {
+            if (!bridge || !bridge.from || !bridge.to) continue;
+            let neighbour = null;
+            if (bridge.from.id === current) neighbour = bridge.to.id;
+            else if (bridge.to.id === current) neighbour = bridge.from.id;
+
+            if (neighbour !== null && !visited.has(neighbour)) {
+              visited.add(neighbour);
+              queue.push(neighbour);
+            }
+          }
+        }
+
+        if (visited.size === islands.length) {
+          setIsSolved(true);
+        }
+      }
+    } catch (err) {
+      console.error('Error checking solved state:', err);
     }
   }, [islands, bridges, countBridges]);
 
+  // Find all neighbours for an island
+  const findAllNeighbours = useCallback((island, islandsList) => {
+    const neighbours = [];
+    const directions = ['up', 'down', 'left', 'right'];
+
+    for (const direction of directions) {
+      let nearest = null;
+      let minDist = Infinity;
+
+      for (const other of islandsList) {
+        if (other.id === island.id) continue;
+
+        let isInDirection = false;
+        let dist = 0;
+
+        switch (direction) {
+          case 'up':
+            if (other.x === island.x && other.y < island.y) {
+              isInDirection = true;
+              dist = island.y - other.y;
+            }
+            break;
+          case 'down':
+            if (other.x === island.x && other.y > island.y) {
+              isInDirection = true;
+              dist = other.y - island.y;
+            }
+            break;
+          case 'left':
+            if (other.y === island.y && other.x < island.x) {
+              isInDirection = true;
+              dist = island.x - other.x;
+            }
+            break;
+          case 'right':
+            if (other.y === island.y && other.x > island.x) {
+              isInDirection = true;
+              dist = other.x - island.x;
+            }
+            break;
+          default:
+            break;
+        }
+
+        if (isInDirection && dist < minDist) {
+          // Check if path is blocked by another island
+          let blocked = false;
+          for (const blocker of islandsList) {
+            if (blocker.id === island.id || blocker.id === other.id) continue;
+            if (direction === 'up' || direction === 'down') {
+              if (blocker.x === island.x &&
+                  blocker.y > Math.min(island.y, other.y) &&
+                  blocker.y < Math.max(island.y, other.y)) {
+                blocked = true;
+                break;
+              }
+            } else {
+              if (blocker.y === island.y &&
+                  blocker.x > Math.min(island.x, other.x) &&
+                  blocker.x < Math.max(island.x, other.x)) {
+                blocked = true;
+                break;
+              }
+            }
+          }
+
+          if (!blocked) {
+            minDist = dist;
+            nearest = other;
+          }
+        }
+      }
+
+      if (nearest) {
+        neighbours.push(nearest);
+      }
+    }
+
+    return neighbours;
+  }, []);
+
+  // Solve puzzle using backtracking
+  const solvePuzzle = useCallback(() => {
+    setSolving(true);
+    setBridges([]);
+    setSelectedIsland(null);
+
+    const islandsList = islands.map(island => ({ ...island }));
+
+    // Build adjacency list
+    const adjacency = new Map();
+    for (const island of islandsList) {
+      adjacency.set(island.id, findAllNeighbours(island, islandsList));
+    }
+
+    // Generate all potential bridge pairs (avoid duplicates)
+    const potentialBridges = [];
+    const seen = new Set();
+    for (const island of islandsList) {
+      const neighbours = adjacency.get(island.id);
+      for (const neighbour of neighbours) {
+        const key = [Math.min(island.id, neighbour.id), Math.max(island.id, neighbour.id)].join('-');
+        if (!seen.has(key)) {
+          seen.add(key);
+          potentialBridges.push({ from: island, to: neighbour });
+        }
+      }
+    }
+
+    // Check if a bridge crosses existing bridges
+    const checkCross = (newBridge, existingBridges) => {
+      const isHorizontal = newBridge.from.y === newBridge.to.y;
+
+      for (const bridge of existingBridges) {
+        if (bridge.count === 0) continue;
+        const bridgeIsHorizontal = bridge.from.y === bridge.to.y;
+        if (isHorizontal === bridgeIsHorizontal) continue;
+
+        if (isHorizontal) {
+          const minX = Math.min(newBridge.from.x, newBridge.to.x);
+          const maxX = Math.max(newBridge.from.x, newBridge.to.x);
+          const minY = Math.min(bridge.from.y, bridge.to.y);
+          const maxY = Math.max(bridge.from.y, bridge.to.y);
+
+          if (bridge.from.x > minX && bridge.from.x < maxX &&
+              newBridge.from.y > minY && newBridge.from.y < maxY) {
+            return true;
+          }
+        } else {
+          const minY = Math.min(newBridge.from.y, newBridge.to.y);
+          const maxY = Math.max(newBridge.from.y, newBridge.to.y);
+          const minX = Math.min(bridge.from.x, bridge.to.x);
+          const maxX = Math.max(bridge.from.x, bridge.to.x);
+
+          if (bridge.from.y > minY && bridge.from.y < maxY &&
+              newBridge.from.x > minX && newBridge.from.x < maxX) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Count bridges for an island in current state
+    const countIslandBridges = (islandId, bridgeState) => {
+      let count = 0;
+      for (const b of bridgeState) {
+        if (b.from.id === islandId || b.to.id === islandId) {
+          count += b.count;
+        }
+      }
+      return count;
+    };
+
+    // Check connectivity
+    const isConnected = (bridgeState) => {
+      const activeBridges = bridgeState.filter(b => b.count > 0);
+      if (activeBridges.length === 0) return false;
+
+      const visited = new Set();
+      const queue = [islandsList[0].id];
+      visited.add(islandsList[0].id);
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        for (const bridge of activeBridges) {
+          let neighbour = null;
+          if (bridge.from.id === current) neighbour = bridge.to.id;
+          else if (bridge.to.id === current) neighbour = bridge.from.id;
+
+          if (neighbour !== null && !visited.has(neighbour)) {
+            visited.add(neighbour);
+            queue.push(neighbour);
+          }
+        }
+      }
+
+      return visited.size === islandsList.length;
+    };
+
+    // Backtracking solver
+    const solve = (bridgeIdx, bridgeState) => {
+      // Check if all islands satisfied
+      const allSatisfied = islandsList.every(island =>
+        countIslandBridges(island.id, bridgeState) === island.bridges
+      );
+
+      if (allSatisfied) {
+        // Check connectivity
+        if (isConnected(bridgeState)) {
+          return bridgeState.filter(b => b.count > 0);
+        }
+        return null;
+      }
+
+      if (bridgeIdx >= potentialBridges.length) {
+        return null;
+      }
+
+      const { from, to } = potentialBridges[bridgeIdx];
+      const fromCount = countIslandBridges(from.id, bridgeState);
+      const toCount = countIslandBridges(to.id, bridgeState);
+      const fromRemaining = from.bridges - fromCount;
+      const toRemaining = to.bridges - toCount;
+
+      // Try 0, 1, or 2 bridges
+      const maxBridges = Math.min(2, fromRemaining, toRemaining);
+
+      for (let count = maxBridges; count >= 0; count--) {
+        const newBridge = { from, to, count };
+
+        // Check crossing
+        if (count > 0 && checkCross(newBridge, bridgeState)) {
+          continue;
+        }
+
+        const newState = [...bridgeState, newBridge];
+        const result = solve(bridgeIdx + 1, newState);
+        if (result) return result;
+      }
+
+      return null;
+    };
+
+    // Run solver with timeout
+    setTimeout(() => {
+      try {
+        const solution = solve(0, []);
+
+        if (solution) {
+          // Animate the solution
+          let idx = 0;
+          solveIntervalRef.current = setInterval(() => {
+            if (idx >= solution.length) {
+              clearInterval(solveIntervalRef.current);
+              setSolving(false);
+              return;
+            }
+            // Ensure bridge has valid structure before adding
+            const bridge = solution[idx];
+            if (bridge && bridge.from && bridge.to && typeof bridge.count === 'number') {
+              setBridges(prev => [...prev, bridge]);
+            }
+            idx++;
+          }, 200);
+        } else {
+          setSolving(false);
+          alert('No solution found!');
+        }
+      } catch (err) {
+        console.error('Solver error:', err);
+        setSolving(false);
+        setError('An error occurred while solving. Please try again.');
+      }
+    }, 100);
+  }, [islands, findAllNeighbours]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (solveIntervalRef.current) {
+        clearInterval(solveIntervalRef.current);
+      }
+    };
+  }, []);
+
   // Render bridges
   const renderBridges = () => {
+    if (!bridges || !Array.isArray(bridges)) return null;
+
     return bridges.map((bridge, idx) => {
+      // Guard against invalid bridge data
+      if (!bridge || !bridge.from || !bridge.to || typeof bridge.from.x !== 'number' || typeof bridge.count !== 'number' || bridge.count < 1) {
+        return null;
+      }
+
       const x1 = bridge.from.x * CELL_SIZE + CELL_SIZE / 2;
       const y1 = bridge.from.y * CELL_SIZE + CELL_SIZE / 2;
       const x2 = bridge.to.x * CELL_SIZE + CELL_SIZE / 2;
       const y2 = bridge.to.y * CELL_SIZE + CELL_SIZE / 2;
 
       const isHorizontal = y1 === y2;
-      const offset = bridge.count === 2 ? 4 : 0;
+      const offset = 4;
 
       if (bridge.count === 1) {
         return (
@@ -388,8 +695,19 @@ const Hashiwokakero = () => {
 
   // Render islands
   const renderIslands = () => {
+    if (!islands || !Array.isArray(islands) || islands.length === 0) return null;
+
     return islands.map((island) => {
-      const currentCount = countBridges(island.id);
+      if (!island || typeof island.id !== 'number' || typeof island.x !== 'number' || typeof island.y !== 'number') {
+        return null;
+      }
+
+      let currentCount = 0;
+      try {
+        currentCount = countBridges(island.id);
+      } catch (e) {
+        console.error('Error counting bridges for island', island.id, e);
+      }
       const isComplete = currentCount === island.bridges;
       const isSelected = selectedIsland?.id === island.id;
 
@@ -419,6 +737,36 @@ const Hashiwokakero = () => {
     });
   };
 
+  // Early return if not initialized or error
+  if (!gridSize || gridSize < 1 || !islands || islands.length === 0) {
+    return (
+      <div className="flex flex-col items-center">
+        <h1 className="text-3xl font-bold mb-4">Hashiwokakero</h1>
+        <p className="text-gray-400 mb-4">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center">
+        <h1 className="text-3xl font-bold mb-4">Hashiwokakero</h1>
+        <div className="mb-4 p-4 bg-red-600 rounded-lg text-white">
+          {error}
+        </div>
+        <button
+          onClick={() => initPuzzle(difficulty)}
+          className="btn bg-primary hover:bg-indigo-600"
+        >
+          Try Again
+        </button>
+        <Link to="/" className="btn btn-secondary mt-6">
+          Back to Games
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center">
       <h1 className="text-3xl font-bold mb-4">Hashiwokakero</h1>
@@ -431,6 +779,7 @@ const Hashiwokakero = () => {
             key={diff}
             onClick={() => setDifficulty(diff)}
             className={`btn ${difficulty === diff ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+            disabled={solving}
           >
             {diff.charAt(0).toUpperCase() + diff.slice(1)}
           </button>
@@ -492,8 +841,16 @@ const Hashiwokakero = () => {
         <button
           onClick={() => initPuzzle(difficulty)}
           className="btn bg-red-500 hover:bg-red-600"
+          disabled={solving}
         >
           Reset
+        </button>
+        <button
+          onClick={solvePuzzle}
+          className="btn bg-green-600 hover:bg-green-500"
+          disabled={solving || isSolved}
+        >
+          {solving ? 'Solving...' : 'Solve'}
         </button>
       </div>
 
@@ -501,7 +858,7 @@ const Hashiwokakero = () => {
       <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
         <h3 className="text-white font-semibold mb-2">How to Play:</h3>
         <ul className="list-disc list-inside space-y-1">
-          <li>Click an island to select it, then click a neighbor to build a bridge</li>
+          <li>Click an island to select it, then click a neighbour to build a bridge</li>
           <li>Right-click a bridge to remove it</li>
           <li>Each island needs exactly the number of bridges shown</li>
           <li>Max 2 bridges between any two islands</li>

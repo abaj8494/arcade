@@ -66,7 +66,7 @@ const GameOfLife = () => {
     );
   }
 
-  const countNeighbors = useCallback((grid, row, col) => {
+  const countNeighbours = useCallback((grid, row, col) => {
     let count = 0;
     for (let i = -1; i <= 1; i++) {
       for (let j = -1; j <= 1; j++) {
@@ -85,18 +85,18 @@ const GameOfLife = () => {
     setGrid(currentGrid => {
       const newGrid = currentGrid.map((row, rowIdx) =>
         row.map((cell, colIdx) => {
-          const neighbors = countNeighbors(currentGrid, rowIdx, colIdx);
+          const neighbours = countNeighbours(currentGrid, rowIdx, colIdx);
           if (cell) {
-            return neighbors === 2 || neighbors === 3;
+            return neighbours === 2 || neighbours === 3;
           } else {
-            return neighbors === 3;
+            return neighbours === 3;
           }
         })
       );
       return newGrid;
     });
     setGeneration(g => g + 1);
-  }, [countNeighbors]);
+  }, [countNeighbours]);
 
   // Game loop
   useEffect(() => {
@@ -287,8 +287,8 @@ const GameOfLife = () => {
       <div className="mt-4 p-4 bg-surface rounded-lg max-w-lg text-gray-400 text-sm">
         <h3 className="text-white font-semibold mb-2">Rules:</h3>
         <ul className="list-disc list-inside space-y-1">
-          <li>Live cell with 2-3 neighbors survives</li>
-          <li>Dead cell with exactly 3 neighbors becomes alive</li>
+          <li>Live cell with 2-3 neighbours survives</li>
+          <li>Dead cell with exactly 3 neighbours becomes alive</li>
           <li>All other cells die or stay dead</li>
           <li>Click or drag to draw cells</li>
         </ul>

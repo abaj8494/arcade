@@ -14,6 +14,7 @@ const Sudoku = () => {
   const [hintsUsed, setHintsUsed] = useState(0);
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [showHighlights, setShowHighlights] = useState(true);
 
   function createEmptyBoard() {
     return Array(9).fill(null).map(() => Array(9).fill(0));
@@ -188,7 +189,7 @@ const Sudoku = () => {
   };
 
   // Handle number input
-  const handleNumberInput = (num) => {
+  const handleNumberInput = useCallback((num) => {
     if (!selectedCell) return;
     const [row, col] = selectedCell;
     if (initialBoard[row][col] !== 0) return;
@@ -228,10 +229,10 @@ const Sudoku = () => {
         setIsRunning(false);
       }
     }
-  };
+  }, [selectedCell, initialBoard, notesMode, notes, board, isValid]);
 
   // Clear selected cell
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     if (!selectedCell) return;
     const [row, col] = selectedCell;
     if (initialBoard[row][col] !== 0) return;
@@ -254,7 +255,7 @@ const Sudoku = () => {
       }
     }
     setErrors(newErrors);
-  };
+  }, [selectedCell, initialBoard, board, notes, isValid]);
 
   // Provide a hint
   const handleHint = () => {
@@ -333,9 +334,9 @@ const Sudoku = () => {
     const isSelected = selectedCell && selectedCell[0] === row && selectedCell[1] === col;
     const isInitial = initialBoard[row][col] !== 0;
     const hasError = errors.has(`${row}-${col}`);
-    const isSameNumber = selectedCell && board[row][col] !== 0 &&
+    const isSameNumber = showHighlights && selectedCell && board[row][col] !== 0 &&
       board[row][col] === board[selectedCell[0]][selectedCell[1]];
-    const isRelated = selectedCell && (
+    const isRelated = showHighlights && selectedCell && (
       row === selectedCell[0] ||
       col === selectedCell[1] ||
       (Math.floor(row / 3) === Math.floor(selectedCell[0] / 3) &&
@@ -447,9 +448,10 @@ const Sudoku = () => {
         ))}
         <button
           onClick={handleClear}
-          className="btn w-10 h-10 sm:w-12 sm:h-12 bg-red-500/50 hover:bg-red-500 text-sm"
+          className="btn w-10 h-10 sm:w-12 sm:h-12 bg-red-500/50 hover:bg-red-500 text-lg"
+          title="Clear cell"
         >
-          Clear
+          X
         </button>
       </div>
 
@@ -460,6 +462,12 @@ const Sudoku = () => {
           className={`btn ${notesMode ? 'bg-purple-600' : 'bg-gray-600 hover:bg-gray-500'}`}
         >
           Notes {notesMode ? 'ON' : 'OFF'}
+        </button>
+        <button
+          onClick={() => setShowHighlights(!showHighlights)}
+          className={`btn ${showHighlights ? 'bg-cyan-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+        >
+          Highlights {showHighlights ? 'ON' : 'OFF'}
         </button>
         <button
           onClick={handleHint}

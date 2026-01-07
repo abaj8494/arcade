@@ -10,7 +10,7 @@ const BOARDS = {
       [null, null, 1, 1, 1, null, null],
       [null, null, 1, 1, 1, null, null],
       [1, 1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 0, 1, 1, 1], // Center empty
+      [1, 1, 1, 0, 1, 1, 1], // Centre empty
       [1, 1, 1, 1, 1, 1, 1],
       [null, null, 1, 1, 1, null, null],
       [null, null, 1, 1, 1, null, null],
@@ -23,7 +23,7 @@ const BOARDS = {
       [null, null, 1, 1, 1, null, null],
       [null, 1, 1, 1, 1, 1, null],
       [1, 1, 1, 1, 1, 1, 1],
-      [1, 1, 1, 0, 1, 1, 1], // Center empty
+      [1, 0, 1, 1, 1, 1, 1], // Position (3,1) empty - solvable
       [1, 1, 1, 1, 1, 1, 1],
       [null, 1, 1, 1, 1, 1, null],
       [null, null, 1, 1, 1, null, null],
@@ -49,6 +49,7 @@ const PegSolitaire = () => {
   const [gameOver, setGameOver] = useState(false);
   const [isSolved, setIsSolved] = useState(false);
   const [isSolving, setIsSolving] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [solutionMoves, setSolutionMoves] = useState([]);
   const solveIntervalRef = useRef(null);
 
@@ -74,6 +75,7 @@ const PegSolitaire = () => {
     setGameOver(false);
     setIsSolved(false);
     setIsSolving(false);
+    setIsThinking(false);
     setSolutionMoves([]);
   }, [boardType]);
 
@@ -183,76 +185,173 @@ const PegSolitaire = () => {
     setValidMoves([]);
   };
 
-  // Solve using DFS with animation
+  // Optimised DFS solver with memoisation
+  const findSolution = useCallback((startBoard) => {
+    const solution = [];
+    const visited = new Set();
+
+    // Convert board to string for memoisation
+    const boardToKey = (board) => {
+      return board.map(row => row.map(c => c === null ? 'x' : c).join('')).join('');
+    };
+
+    const getAllMoves = (board) => {
+      const moves = [];
+      // Prioritise moves towards centre for better pruning
+      const order = [[3,3], [2,3], [3,2], [3,4], [4,3], [2,2], [2,4], [4,2], [4,4]];
+      const checked = new Set();
+
+      // Check centre-adjacent positions first
+      for (const [r, c] of order) {
+        if (board[r]?.[c] === 1) {
+          for (const [dr, dc] of DIRECTIONS) {
+            const midR = r + dr / 2;
+            const midC = c + dc / 2;
+            const endR = r + dr;
+            const endC = c + dc;
+            if (endR >= 0 && endR < 7 && endC >= 0 && endC < 7 &&
+                board[midR]?.[midC] === 1 && board[endR]?.[endC] === 0) {
+              moves.push({ from: [r, c], to: [endR, endC], mid: [midR, midC] });
+            }
+          }
+          checked.add(`${r},${c}`);
+        }
+      }
+
+      // Check remaining positions
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+          if (board[r][c] === 1 && !checked.has(`${r},${c}`)) {
+            for (const [dr, dc] of DIRECTIONS) {
+              const midR = r + dr / 2;
+              const midC = c + dc / 2;
+              const endR = r + dr;
+              const endC = c + dc;
+              if (endR >= 0 && endR < 7 && endC >= 0 && endC < 7 &&
+                  board[midR]?.[midC] === 1 && board[endR]?.[endC] === 0) {
+                moves.push({ from: [r, c], to: [endR, endC], mid: [midR, midC] });
+              }
+            }
+          }
+        }
+      }
+      return moves;
+    };
+
+    const countPegs = (board) => {
+      let count = 0;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+          if (board[r][c] === 1) count++;
+        }
+      }
+      return count;
+    };
+
+    const dfs = (board, moves) => {
+      const pegCount = countPegs(board);
+      if (pegCount === 1) {
+        if (board[3][3] === 1) {
+          solution.push(...moves);
+          return true;
+        }
+        return false;
+      }
+
+      const key = boardToKey(board);
+      if (visited.has(key)) return false;
+      visited.add(key);
+
+      const possibleMoves = getAllMoves(board);
+      if (possibleMoves.length === 0) return false;
+
+      for (const move of possibleMoves) {
+        const [sr, sc] = move.from;
+        const [er, ec] = move.to;
+        const [mr, mc] = move.mid;
+
+        // Make move in-place for speed
+        board[sr][sc] = 0;
+        board[mr][mc] = 0;
+        board[er][ec] = 1;
+
+        if (dfs(board, [...moves, { from: move.from, to: move.to }])) {
+          return true;
+        }
+
+        // Undo move
+        board[sr][sc] = 1;
+        board[mr][mc] = 1;
+        board[er][ec] = 0;
+      }
+      return false;
+    };
+
+    // Clone start board for DFS
+    const workingBoard = startBoard.map(r => [...r]);
+    dfs(workingBoard, []);
+    return solution;
+  }, []);
+
+  // Solve with animation
   const solvePuzzle = useCallback(() => {
-    // Known solution for British board starting from center empty
-    const solution = [
-      { from: [5, 3], to: [3, 3] },
-      { from: [4, 1], to: [4, 3] },
-      { from: [4, 4], to: [4, 2] },
-      { from: [2, 4], to: [4, 4] },
-      { from: [4, 5], to: [4, 3] },
-      { from: [6, 4], to: [4, 4] },
-      { from: [3, 4], to: [5, 4] },
-      { from: [6, 2], to: [6, 4] },
-      { from: [6, 4], to: [4, 4] },
-      { from: [2, 2], to: [4, 2] },
-      { from: [4, 1], to: [4, 3] },
-      { from: [4, 3], to: [4, 5] },
-      { from: [4, 6], to: [4, 4] },
-      { from: [2, 6], to: [4, 6] },
-      { from: [4, 6], to: [4, 4] },
-      { from: [0, 4], to: [2, 4] },
-      { from: [2, 3], to: [2, 5] },
-      { from: [2, 6], to: [2, 4] },
-      { from: [2, 4], to: [4, 4] },
-      { from: [0, 2], to: [2, 2] },
-      { from: [2, 1], to: [2, 3] },
-      { from: [0, 3], to: [2, 3] },
-      { from: [3, 2], to: [1, 2] },
-      { from: [0, 2], to: [2, 2] },
-      { from: [3, 0], to: [3, 2] },
-      { from: [3, 2], to: [1, 2] },
-      { from: [1, 2], to: [1, 4] },
-      { from: [1, 4], to: [3, 4] },
-      { from: [3, 4], to: [5, 4] },
-      { from: [5, 4], to: [5, 2] },
-      { from: [5, 2], to: [3, 2] },
-    ];
-
     setIsSolving(true);
-    resetGame();
+    setIsThinking(true);
 
-    let moveIndex = 0;
-    let currentBoard = cloneBoard(BOARDS[boardType].layout);
-    let currentPegs = BOARDS[boardType].totalPegs;
+    // Reset to initial state
+    const config = BOARDS[boardType];
+    const startBoard = cloneBoard(config.layout);
 
-    solveIntervalRef.current = setInterval(() => {
-      if (moveIndex >= solution.length) {
-        clearInterval(solveIntervalRef.current);
+    setBoard(cloneBoard(config.layout));
+    setPegsRemaining(config.totalPegs);
+    setMoveHistory([]);
+    setGameOver(false);
+    setIsSolved(false);
+    setSelectedPeg(null);
+    setValidMoves([]);
+
+    // Run solver in setTimeout to allow UI to update with thinking state
+    setTimeout(() => {
+      const solution = findSolution(startBoard);
+      setIsThinking(false);
+
+      if (solution.length === 0) {
         setIsSolving(false);
-        setGameOver(true);
-        setIsSolved(true);
+        alert('No solution found for this board configuration.');
         return;
       }
 
-      const move = solution[moveIndex];
-      const [startRow, startCol] = move.from;
-      const [endRow, endCol] = move.to;
-      const midRow = (startRow + endRow) / 2;
-      const midCol = (startCol + endCol) / 2;
+      let currentBoard = cloneBoard(config.layout);
+      let currentPegs = config.totalPegs;
+      let moveIndex = 0;
 
-      currentBoard[startRow][startCol] = 0;
-      currentBoard[midRow][midCol] = 0;
-      currentBoard[endRow][endCol] = 1;
-      currentPegs--;
+      solveIntervalRef.current = setInterval(() => {
+        if (moveIndex >= solution.length) {
+          clearInterval(solveIntervalRef.current);
+          setIsSolving(false);
+          setGameOver(true);
+          setIsSolved(true);
+          return;
+        }
 
-      setBoard([...currentBoard.map(r => [...r])]);
-      setPegsRemaining(currentPegs);
+        const move = solution[moveIndex];
+        const [startRow, startCol] = move.from;
+        const [endRow, endCol] = move.to;
+        const midRow = (startRow + endRow) / 2;
+        const midCol = (startCol + endCol) / 2;
 
-      moveIndex++;
-    }, 500);
-  }, [boardType, resetGame]);
+        currentBoard[startRow][startCol] = 0;
+        currentBoard[midRow][midCol] = 0;
+        currentBoard[endRow][endCol] = 1;
+        currentPegs--;
+
+        setBoard([...currentBoard.map(r => [...r])]);
+        setPegsRemaining(currentPegs);
+
+        moveIndex++;
+      }, 400);
+    }, 50);
+  }, [boardType, findSolution]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -270,16 +369,17 @@ const PegSolitaire = () => {
     const isSelected = selectedPeg?.row === row && selectedPeg?.col === col;
     const isValidTarget = validMoves.some(m => m.endRow === row && m.endCol === col);
 
-    let classes = 'w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200 ';
+    let classes = 'w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200 flex items-center justify-center ';
 
     if (cell === 1) {
       classes += isSelected
-        ? 'bg-yellow-500 ring-4 ring-yellow-300 cursor-pointer transform scale-110 '
-        : 'bg-blue-500 hover:bg-blue-400 cursor-pointer ';
+        ? 'ring-4 ring-pink-400 cursor-pointer transform scale-110 '
+        : 'cursor-pointer ';
     } else {
+      // Empty hole - dark depression in the board
       classes += isValidTarget
-        ? 'bg-green-500/50 ring-2 ring-green-400 cursor-pointer '
-        : 'bg-gray-700 ';
+        ? 'bg-amber-950 ring-2 ring-green-400 cursor-pointer '
+        : 'bg-amber-950 ';
     }
 
     return classes;
@@ -288,7 +388,7 @@ const PegSolitaire = () => {
   return (
     <div className="flex flex-col items-center">
       <h1 className="text-3xl font-bold mb-2">Peg Solitaire</h1>
-      <p className="text-gray-400 mb-4">Remove all pegs except one in the center</p>
+      <p className="text-gray-400 mb-4">Remove all pegs except one in the centre</p>
 
       {/* Board Type Selection */}
       <div className="mb-4 flex gap-4">
@@ -313,6 +413,21 @@ const PegSolitaire = () => {
           Moves: <span className="text-green-500 font-bold">{moveHistory.length}</span>
         </div>
       </div>
+
+      {/* Thinking Indicator */}
+      <AnimatePresence>
+        {isThinking && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="mb-4 p-4 rounded-lg font-bold bg-blue-600 flex items-center gap-3"
+          >
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+            Computing solution...
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Game Over Message */}
       <AnimatePresence>
@@ -350,10 +465,11 @@ const PegSolitaire = () => {
                     layout
                   >
                     {cell === 1 && (
-                      <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-400 to-blue-700 shadow-lg" />
-                    )}
-                    {cell === 0 && (
-                      <div className="w-4 h-4 rounded-full bg-gray-800" />
+                      <div className={`w-full h-full rounded-full shadow-lg ${
+                        selectedPeg?.row === rowIdx && selectedPeg?.col === colIdx
+                          ? 'bg-gradient-to-br from-pink-400 to-pink-600'
+                          : 'bg-gradient-to-br from-blue-400 to-blue-700'
+                      }`} />
                     )}
                   </motion.div>
                 )}
@@ -379,15 +495,13 @@ const PegSolitaire = () => {
         >
           Undo
         </button>
-        {boardType === 'british' && (
-          <button
-            onClick={solvePuzzle}
-            className="btn bg-green-600 hover:bg-green-500"
-            disabled={isSolving}
-          >
-            {isSolving ? 'Solving...' : 'Show Solution'}
-          </button>
-        )}
+        <button
+          onClick={solvePuzzle}
+          className="btn bg-green-600 hover:bg-green-500"
+          disabled={isSolving}
+        >
+          {isThinking ? 'Thinking...' : isSolving ? 'Solving...' : 'Show Solution'}
+        </button>
       </div>
 
       {/* Instructions */}
@@ -398,7 +512,7 @@ const PegSolitaire = () => {
           <li>Click a valid empty hole to jump to it</li>
           <li>Pegs can only jump over adjacent pegs</li>
           <li>The jumped-over peg is removed</li>
-          <li>Goal: Leave exactly 1 peg in the center</li>
+          <li>Goal: Leave exactly 1 peg in the centre</li>
         </ul>
       </div>
 

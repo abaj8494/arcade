@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <rect width="100" height="100" fill="#374151"/>
+
+  <!-- Grid of cells -->
+  <!-- Revealed cells -->
+  <rect x="5" y="5" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="26" y="5" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="47" y="5" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="68" y="5" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+
+  <rect x="5" y="26" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="26" y="26" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="47" y="26" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="68" y="26" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+
+  <rect x="5" y="47" width="18" height="18" fill="#9ca3af" stroke="#6b7280"/>
+  <rect x="26" y="47" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="47" y="47" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="68" y="47" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+
+  <rect x="5" y="68" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="26" y="68" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="47" y="68" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+  <rect x="68" y="68" width="18" height="18" fill="#d1d5db" stroke="#9ca3af"/>
+
+  <!-- Numbers -->
+  <text x="11" y="19" font-size="12" font-weight="bold" fill="#3b82f6">1</text>
+  <text x="32" y="19" font-size="12" font-weight="bold" fill="#22c55e">2</text>
+  <text x="53" y="19" font-size="12" font-weight="bold" fill="#ef4444">3</text>
+  <text x="11" y="40" font-size="12" font-weight="bold" fill="#3b82f6">1</text>
+  <text x="32" y="40" font-size="12" font-weight="bold" fill="#22c55e">2</text>
+  <text x="11" y="61" font-size="12" font-weight="bold" fill="#3b82f6">1</text>
+
+  <!-- Mine -->
+  <circle cx="77" cy="14" r="6" fill="#1f2937"/>
+  <line x1="77" y1="6" x2="77" y2="22" stroke="#1f2937" stroke-width="2"/>
+  <line x1="69" y1="14" x2="85" y2="14" stroke="#1f2937" stroke-width="2"/>
+  <line x1="71" y1="8" x2="83" y2="20" stroke="#1f2937" stroke-width="2"/>
+  <line x1="83" y1="8" x2="71" y2="20" stroke="#1f2937" stroke-width="2"/>
+
+  <!-- Flag -->
+  <polygon points="77,51 77,63 72,57" fill="#ef4444"/>
+  <line x1="77" y1="51" x2="77" y2="65" stroke="#1f2937" stroke-width="2"/>
+</svg>

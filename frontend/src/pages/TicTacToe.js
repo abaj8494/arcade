@@ -87,7 +87,7 @@ const TicTacToe = () => {
     return classes;
   };
 
-  const getSymbolColor = (value) => {
+  const getSymbolColour = (value) => {
     if (value === 'X') return 'text-blue-400';
     if (value === 'O') return 'text-pink-400';
     return '';
@@ -144,7 +144,7 @@ const TicTacToe = () => {
               <motion.span
                 initial={{ scale: 0, rotate: -180 }}
                 animate={{ scale: 1, rotate: 0 }}
-                className={getSymbolColor(cell)}
+                className={getSymbolColour(cell)}
               >
                 {cell}
               </motion.span>

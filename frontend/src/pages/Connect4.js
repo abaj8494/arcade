@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const ROWS = 6;
 const COLS = 7;
@@ -17,7 +17,6 @@ const Connect4 = () => {
   const [gameMode, setGameMode] = useState('2player'); // '2player' or 'ai'
   const [aiDifficulty, setAiDifficulty] = useState('medium'); // 'easy', 'medium', 'hard'
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [droppingPiece, setDroppingPiece] = useState(null);
   const [hoverCol, setHoverCol] = useState(null);
   const aiTimeoutRef = useRef(null);
 
@@ -81,37 +80,32 @@ const Connect4 = () => {
     const row = getLowestEmptyRow(board, col);
     if (row === -1 || winner) return false;
 
-    setDroppingPiece({ col, row, player });
+    const newBoard = board.map(r => [...r]);
+    newBoard[row][col] = player;
+    setBoard(newBoard);
 
-    setTimeout(() => {
-      const newBoard = board.map(r => [...r]);
-      newBoard[row][col] = player;
-      setBoard(newBoard);
-      setDroppingPiece(null);
-
-      const result = checkWinner(newBoard);
-      if (result) {
-        setWinner(result.winner);
-        setWinningCells(result.cells);
-        if (result.winner === 'draw') {
-          setScores(prev => ({ ...prev, draws: prev.draws + 1 }));
-        } else {
-          setScores(prev => ({ ...prev, [result.winner]: prev[result.winner] + 1 }));
-        }
+    const result = checkWinner(newBoard);
+    if (result) {
+      setWinner(result.winner);
+      setWinningCells(result.cells);
+      if (result.winner === 'draw') {
+        setScores(prev => ({ ...prev, draws: prev.draws + 1 }));
       } else {
-        setCurrentPlayer(player === PLAYER_1 ? PLAYER_2 : PLAYER_1);
+        setScores(prev => ({ ...prev, [result.winner]: prev[result.winner] + 1 }));
       }
-    }, 300);
+    } else {
+      setCurrentPlayer(player === PLAYER_1 ? PLAYER_2 : PLAYER_1);
+    }
 
     return true;
   }, [board, winner, getLowestEmptyRow, checkWinner]);
 
   const handleColumnClick = useCallback((col) => {
-    if (winner || isAiThinking || droppingPiece) return;
+    if (winner || isAiThinking) return;
     if (gameMode === 'ai' && currentPlayer === PLAYER_2) return;
 
     makeMove(col, currentPlayer);
-  }, [winner, isAiThinking, droppingPiece, gameMode, currentPlayer, makeMove]);
+  }, [winner, isAiThinking, gameMode, currentPlayer, makeMove]);
 
   // AI Logic with Minimax
   const evaluateBoard = useCallback((board, player) => {
@@ -124,10 +118,12 @@ const Connect4 = () => {
       const opponentCount = window.filter(c => c === opponent).length;
       const emptyCount = window.filter(c => c === EMPTY).length;
 
-      if (playerCount === 4) return 100;
-      if (playerCount === 3 && emptyCount === 1) return 5;
-      if (playerCount === 2 && emptyCount === 2) return 2;
-      if (opponentCount === 3 && emptyCount === 1) return -4;
+      if (playerCount === 4) return 10000;
+      if (opponentCount === 4) return -10000;
+      if (playerCount === 3 && emptyCount === 1) return 100;
+      if (playerCount === 2 && emptyCount === 2) return 10;
+      if (opponentCount === 3 && emptyCount === 1) return -80;
+      if (opponentCount === 2 && emptyCount === 2) return -5;
       return 0;
     };
 
@@ -163,10 +159,10 @@ const Connect4 = () => {
       }
     }
 
-    // Center column preference
-    const centerCol = Math.floor(COLS / 2);
-    const centerCount = board.filter((row) => row[centerCol] === player).length;
-    score += centerCount * 3;
+    // Centre column preference
+    const centreCol = Math.floor(COLS / 2);
+    const centreCount = board.filter((row) => row[centreCol] === player).length;
+    score += centreCount * 3;
 
     return score;
   }, []);
@@ -214,8 +210,18 @@ const Connect4 = () => {
     }
   }, [checkWinner, evaluateBoard, getLowestEmptyRow]);
 
+  // Check if a move wins for a player
+  const checkWinningMove = useCallback((board, col, player) => {
+    const row = getLowestEmptyRow(board, col);
+    if (row === -1) return false;
+    const newBoard = board.map(r => [...r]);
+    newBoard[row][col] = player;
+    const result = checkWinner(newBoard);
+    return result && result.winner === player;
+  }, [getLowestEmptyRow, checkWinner]);
+
   const getAiMove = useCallback(() => {
-    const depths = { easy: 2, medium: 4, hard: 6 };
+    const depths = { easy: 2, medium: 5, hard: 7 };
     const depth = depths[aiDifficulty];
 
     const validCols = [];
@@ -223,14 +229,35 @@ const Connect4 = () => {
       if (board[0][col] === EMPTY) validCols.push(col);
     }
 
-    if (aiDifficulty === 'easy' && Math.random() < 0.3) {
+    // Easy mode: sometimes make random moves
+    if (aiDifficulty === 'easy' && Math.random() < 0.4) {
       return validCols[Math.floor(Math.random() * validCols.length)];
     }
 
-    let bestCol = validCols[0];
+    // CRITICAL: First check for immediate winning move
+    for (const col of validCols) {
+      if (checkWinningMove(board, col, PLAYER_2)) {
+        return col; // Take the win!
+      }
+    }
+
+    // CRITICAL: Then check if opponent can win next turn and block
+    for (const col of validCols) {
+      if (checkWinningMove(board, col, PLAYER_1)) {
+        return col; // Block the win!
+      }
+    }
+
+    // Use minimax for strategic move
+    let bestCol = validCols[Math.floor(validCols.length / 2)]; // Prefer centre
     let bestScore = -Infinity;
 
-    for (const col of validCols) {
+    // Order columns to check centre first (better pruning)
+    const orderedCols = [...validCols].sort((a, b) =>
+      Math.abs(a - 3) - Math.abs(b - 3)
+    );
+
+    for (const col of orderedCols) {
       const row = getLowestEmptyRow(board, col);
       const newBoard = board.map(r => [...r]);
       newBoard[row][col] = PLAYER_2;
@@ -242,11 +269,11 @@ const Connect4 = () => {
     }
 
     return bestCol;
-  }, [board, aiDifficulty, getLowestEmptyRow, minimax]);
+  }, [board, aiDifficulty, getLowestEmptyRow, minimax, checkWinningMove]);
 
   // AI turn effect
   useEffect(() => {
-    if (gameMode === 'ai' && currentPlayer === PLAYER_2 && !winner && !droppingPiece) {
+    if (gameMode === 'ai' && currentPlayer === PLAYER_2 && !winner) {
       setIsAiThinking(true);
       aiTimeoutRef.current = setTimeout(() => {
         const col = getAiMove();
@@ -260,14 +287,13 @@ const Connect4 = () => {
         clearTimeout(aiTimeoutRef.current);
       }
     };
-  }, [gameMode, currentPlayer, winner, droppingPiece, getAiMove, makeMove]);
+  }, [gameMode, currentPlayer, winner, getAiMove, makeMove]);
 
   const resetGame = () => {
     setBoard(createEmptyBoard());
     setCurrentPlayer(PLAYER_1);
     setWinner(null);
     setWinningCells([]);
-    setDroppingPiece(null);
     setIsAiThinking(false);
     if (aiTimeoutRef.current) {
       clearTimeout(aiTimeoutRef.current);
@@ -394,28 +420,11 @@ const Connect4 = () => {
                 onMouseEnter={() => setHoverCol(colIndex)}
                 onMouseLeave={() => setHoverCol(null)}
               >
-                <AnimatePresence>
-                  {cell && (
-                    <motion.div
-                      initial={{ y: -300 }}
-                      animate={{ y: 0 }}
-                      transition={{ type: 'spring', damping: 15, stiffness: 300 }}
-                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
-                        cell === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
-                      } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''}`}
-                    />
-                  )}
-                </AnimatePresence>
-
-                {/* Dropping animation */}
-                {droppingPiece && droppingPiece.col === colIndex && droppingPiece.row === rowIndex && (
-                  <motion.div
-                    initial={{ y: -300 }}
-                    animate={{ y: 0 }}
-                    transition={{ type: 'spring', damping: 15, stiffness: 300 }}
-                    className={`absolute w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
-                      droppingPiece.player === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
-                    }`}
+                {cell && (
+                  <div
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
+                      cell === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
+                    } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''}`}
                   />
                 )}
               </div>

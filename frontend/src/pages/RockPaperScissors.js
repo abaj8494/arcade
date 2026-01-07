@@ -97,7 +97,7 @@ const RockPaperScissors = () => {
     return 'You lose!';
   };
 
-  const getResultColor = () => {
+  const getResultColour = () => {
     if (!result) return 'text-gray-400';
     if (result === 'tie') return 'text-yellow-400';
     if (result === 'win') return 'text-green-500';
@@ -210,7 +210,7 @@ const RockPaperScissors = () => {
         key={result}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`text-2xl font-bold mb-6 ${getResultColor()}`}
+        className={`text-2xl font-bold mb-6 ${getResultColour()}`}
       >
         {getResultText()}
       </motion.div>

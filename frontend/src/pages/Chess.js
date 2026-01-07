@@ -57,6 +57,7 @@ const Chess = () => {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [promotionSquare, setPromotionSquare] = useState(null);
   const [lastMove, setLastMove] = useState(null);
+  const [showMoveHints, setShowMoveHints] = useState(true);
   const aiTimeoutRef = useRef(null);
 
   // Find king position
@@ -444,7 +445,7 @@ const Chess = () => {
             const advance = isWhite(piece) ? (6 - r) : (r - 1);
             score += isWhite(piece) ? advance * 10 : -advance * 10;
           }
-          // Center control bonus
+          // Centre control bonus
           if ((c === 3 || c === 4) && (r === 3 || r === 4)) {
             score += isWhite(piece) ? 30 : -30;
           }
@@ -693,7 +694,7 @@ const Chess = () => {
                 )}
 
                 {/* Valid move indicator */}
-                {validMoves.some(m => m[0] === rowIndex && m[1] === colIndex) && (
+                {showMoveHints && validMoves.some(m => m[0] === rowIndex && m[1] === colIndex) && (
                   <div className={`absolute w-3 h-3 rounded-full ${
                     board[rowIndex][colIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
                   }`} />
@@ -737,6 +738,12 @@ const Chess = () => {
       <div className="flex gap-4 mt-4">
         <button onClick={resetGame} className="btn btn-primary">
           New Game
+        </button>
+        <button
+          onClick={() => setShowMoveHints(!showMoveHints)}
+          className={`btn ${showMoveHints ? 'bg-green-600 hover:bg-green-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+        >
+          Hints {showMoveHints ? 'ON' : 'OFF'}
         </button>
       </div>
 

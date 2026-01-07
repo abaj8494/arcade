@@ -17,12 +17,21 @@ const games = [
   { id: 'game-of-life', name: 'Game of Life', image: '/images/game-of-life.svg', implemented: true },
   { id: 'rock-paper-scissors', name: 'Rock Paper Scissors', image: '/images/rps.svg', implemented: true },
   { id: 'sydney-train-game', name: 'Sydney Train Game', image: '/images/train-game.svg', implemented: true },
-  { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true }
+  { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true },
+  { id: 'brick-breaker', name: 'Brick Breaker', image: '/images/brick-breaker.svg', implemented: true },
+  { id: 'n-queens', name: 'N-Queens', image: '/images/n-queens.svg', implemented: true },
+  { id: 'minesweeper', name: 'Minesweeper', image: '/images/minesweeper.svg', implemented: true }
 ];
 
 // Get all games
 exports.getGames = (req, res) => {
-  res.json(games);
+  // Add cache-busting timestamp to image URLs
+  const timestamp = Date.now();
+  const gamesWithCacheBust = games.map(game => ({
+    ...game,
+    image: `${game.image}?v=${timestamp}`
+  }));
+  res.json(gamesWithCacheBust);
 };
 
 // Towers of Hanoi solver

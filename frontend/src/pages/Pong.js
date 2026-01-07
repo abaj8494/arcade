@@ -86,12 +86,12 @@ const Pong = () => {
         }
       } else {
         // AI control for paddle 2
-        const paddle2Center = state.paddle2Y + PADDLE_HEIGHT / 2;
+        const paddle2Centre = state.paddle2Y + PADDLE_HEIGHT / 2;
         const targetY = state.ballX > CANVAS_WIDTH / 2 ? state.ballY : CANVAS_HEIGHT / 2;
 
-        if (paddle2Center < targetY - 10) {
+        if (paddle2Centre < targetY - 10) {
           state.paddle2Y = Math.min(CANVAS_HEIGHT - PADDLE_HEIGHT, state.paddle2Y + aiSpeed);
-        } else if (paddle2Center > targetY + 10) {
+        } else if (paddle2Centre > targetY + 10) {
           state.paddle2Y = Math.max(0, state.paddle2Y - aiSpeed);
         }
       }
@@ -168,7 +168,7 @@ const Pong = () => {
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // Draw center line
+      // Draw centre line
       ctx.setLineDash([10, 10]);
       ctx.strokeStyle = '#334155';
       ctx.lineWidth = 2;

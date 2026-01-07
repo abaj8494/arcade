@@ -180,7 +180,7 @@ const TowersOfHanoi = () => {
                     key={`tower-${towerIndex}-disc-${disc}`}
                     className="rounded-md mb-1 z-20"
                     style={{
-                      backgroundColor: getDiscColor(disc),
+                      backgroundColor: getDiscColour(disc),
                       width: `${disc * 20 + 30}px`,
                       height: '20px',
                     }}
@@ -202,9 +202,9 @@ const TowersOfHanoi = () => {
   );
 };
 
-// Function to get disc color based on size
-const getDiscColor = (size) => {
-  const colors = [
+// Function to get disc colour based on size
+const getDiscColour = (size) => {
+  const colours = [
     '#F87171', // red
     '#FBBF24', // amber
     '#34D399', // emerald
@@ -215,7 +215,7 @@ const getDiscColor = (size) => {
     '#C4B5FD', // purple
   ];
   
-  return colors[(size - 1) % colors.length];
+  return colours[(size - 1) % colours.length];
 };
 
 export default TowersOfHanoi; 
