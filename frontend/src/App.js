@@ -8,6 +8,8 @@ import Connect4 from './pages/Connect4';
 import Sudoku from './pages/Sudoku';
 import UltimateTicTacToe from './pages/UltimateTicTacToe';
 import Chess from './pages/Chess';
+import Tetris from './pages/Tetris';
+import Snake from './pages/Snake';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -24,8 +26,8 @@ function App() {
           <Route path="/game/ultimate-tic-tac-toe" element={<UltimateTicTacToe />} />
           <Route path="/game/banagrams-solver" element={<GamePlaceholder name="Banagrams Solver" />} />
           <Route path="/game/chess" element={<Chess />} />
-          <Route path="/game/tetris" element={<GamePlaceholder name="Tetris" />} />
-          <Route path="/game/snake" element={<GamePlaceholder name="Snake" />} />
+          <Route path="/game/tetris" element={<Tetris />} />
+          <Route path="/game/snake" element={<Snake />} />
           <Route path="/game/pong" element={<GamePlaceholder name="Pong" />} />
           <Route path="/game/hashiwokakero" element={<GamePlaceholder name="Hashiwokakero" />} />
         </Routes>

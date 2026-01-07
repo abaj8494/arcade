@@ -9,8 +9,8 @@ const games = [
   { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.png', implemented: true },
   { id: 'banagrams-solver', name: 'Banagrams Solver', image: '/images/banagrams.png', implemented: false },
   { id: 'chess', name: 'Chess', image: '/images/chess.png', implemented: true },
-  { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: false },
-  { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: false },
+  { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
+  { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
   { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: false },
   { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: false }
 ];
