@@ -6,6 +6,7 @@ import TowersOfHanoi from './pages/TowersOfHanoi';
 import TicTacToe from './pages/TicTacToe';
 import Connect4 from './pages/Connect4';
 import Sudoku from './pages/Sudoku';
+import UltimateTicTacToe from './pages/UltimateTicTacToe';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -19,7 +20,7 @@ function App() {
           <Route path="/game/tic-tac-toe" element={<TicTacToe />} />
           <Route path="/game/connect4" element={<Connect4 />} />
           <Route path="/game/sudoku" element={<Sudoku />} />
-          <Route path="/game/ultimate-tic-tac-toe" element={<GamePlaceholder name="Ultimate Tic Tac Toe" />} />
+          <Route path="/game/ultimate-tic-tac-toe" element={<UltimateTicTacToe />} />
           <Route path="/game/banagrams-solver" element={<GamePlaceholder name="Banagrams Solver" />} />
           <Route path="/game/chess" element={<GamePlaceholder name="Chess" />} />
           <Route path="/game/tetris" element={<GamePlaceholder name="Tetris" />} />
