@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import TowersOfHanoi from './pages/TowersOfHanoi';
 import TicTacToe from './pages/TicTacToe';
+import Connect4 from './pages/Connect4';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -15,7 +16,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/game/towers-of-hanoi" element={<TowersOfHanoi />} />
           <Route path="/game/tic-tac-toe" element={<TicTacToe />} />
-          <Route path="/game/connect4" element={<GamePlaceholder name="Connect 4" />} />
+          <Route path="/game/connect4" element={<Connect4 />} />
           <Route path="/game/sudoku" element={<GamePlaceholder name="Sudoku" />} />
           <Route path="/game/ultimate-tic-tac-toe" element={<GamePlaceholder name="Ultimate Tic Tac Toe" />} />
           <Route path="/game/banagrams-solver" element={<GamePlaceholder name="Banagrams Solver" />} />
