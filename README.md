@@ -4,16 +4,24 @@ A collection of classic and strategic games implemented with React on the fronte
 
 ## Games
 
-0. Towers of Hanoi (normal and advanced) - **Implemented**
-1. Connect4 (AI) - Coming Soon
-2. Sudoku - Coming Soon
-3. Ultimate Tic Tac Toe - Coming Soon
-4. Banagrams Solver - Coming Soon
-5. Chess (AI) - Coming Soon
-6. Tetris - Coming Soon
-7. Snake - Coming Soon
-8. Pong - Coming Soon
-9. Hashiwokakero - Coming Soon
+| Game | Features | Status |
+|------|----------|--------|
+| Towers of Hanoi | Normal and advanced modes | Implemented |
+| Tic-Tac-Toe | 2-player mode | Implemented |
+| Connect 4 | 2-player + AI (minimax) | Implemented |
+| Sudoku | Puzzle generator + solver | Implemented |
+| Ultimate Tic-Tac-Toe | 2-player mode | Implemented |
+| Chess | 2-player + AI (minimax with alpha-beta) | Implemented |
+| Tetris | Classic gameplay with levels | Implemented |
+| Snake | Arrow key controls | Implemented |
+| Pong | 2-player + AI modes | Implemented |
+| Hashiwokakero | Bridges puzzle with solver | Implemented |
+| Knight's Tour | Warnsdorff algorithm solver | Implemented |
+| Game of Life | Conway's cellular automaton | Implemented |
+| Rock Paper Scissors | vs Computer with streaks | Implemented |
+| Sydney Train Game | Make 10 from 4 digits puzzle | Implemented |
+| Peg Solitaire | British + European boards | Implemented |
+| Bananagrams Solver | Word puzzle solver | Coming Soon |
 
 ## Tech Stack
 
