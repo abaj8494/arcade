@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" fill="#0a0a0a" rx="15" ry="15"/>
+
+  <!-- Grid background -->
+  <g stroke="#1a1a1a" stroke-width="0.5">
+    <line x1="10" y1="10" x2="10" y2="90"/>
+    <line x1="20" y1="10" x2="20" y2="90"/>
+    <line x1="30" y1="10" x2="30" y2="90"/>
+    <line x1="40" y1="10" x2="40" y2="90"/>
+    <line x1="50" y1="10" x2="50" y2="90"/>
+    <line x1="60" y1="10" x2="60" y2="90"/>
+    <line x1="70" y1="10" x2="70" y2="90"/>
+    <line x1="80" y1="10" x2="80" y2="90"/>
+    <line x1="90" y1="10" x2="90" y2="90"/>
+    <line x1="10" y1="10" x2="90" y2="10"/>
+    <line x1="10" y1="20" x2="90" y2="20"/>
+    <line x1="10" y1="30" x2="90" y2="30"/>
+    <line x1="10" y1="40" x2="90" y2="40"/>
+    <line x1="10" y1="50" x2="90" y2="50"/>
+    <line x1="10" y1="60" x2="90" y2="60"/>
+    <line x1="10" y1="70" x2="90" y2="70"/>
+    <line x1="10" y1="80" x2="90" y2="80"/>
+    <line x1="10" y1="90" x2="90" y2="90"/>
+  </g>
+
+  <!-- Glider pattern -->
+  <g fill="#22c55e">
+    <rect x="40" y="20" width="9" height="9" rx="1"/>
+    <rect x="50" y="30" width="9" height="9" rx="1"/>
+    <rect x="30" y="40" width="9" height="9" rx="1"/>
+    <rect x="40" y="40" width="9" height="9" rx="1"/>
+    <rect x="50" y="40" width="9" height="9" rx="1"/>
+  </g>
+
+  <!-- Some other live cells for decoration -->
+  <g fill="#22c55e" opacity="0.6">
+    <rect x="70" y="60" width="9" height="9" rx="1"/>
+    <rect x="70" y="70" width="9" height="9" rx="1"/>
+    <rect x="70" y="80" width="9" height="9" rx="1"/>
+  </g>
+
+  <g fill="#22c55e" opacity="0.4">
+    <rect x="20" y="70" width="9" height="9" rx="1"/>
+    <rect x="10" y="80" width="9" height="9" rx="1"/>
+  </g>
+</svg>
