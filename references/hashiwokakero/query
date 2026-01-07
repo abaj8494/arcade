@@ -1,0 +1,51 @@
+even with this recursive function:
+
+int solve_map(Puzzle p) { // backtrack
+    print_map(p);
+    printf("\n");
+    if(p->fbridges == p->bbridges) return check_solved(p);
+    printf("I want %d\nI have %d\n", p->fbridges, p->bbridges);
+
+    for(int i = 0; i < p->nislands; i++) {
+        //printf("island %d\n",i);
+        Island curr = p->nodes[i];
+        if(curr->curr_bridges == curr->max_bridges) continue;
+        for(int dir = 0; dir < DIRECTIONS; dir++) {
+            if(can_build_bridge(p, curr, dir)) {
+                add_bridge(p, curr, dir);
+                if(solve_map(p)) return TRUE;
+                remove_bridge(p, curr, dir);
+            }
+        }
+    }
+    return FALSE;
+}
+
+
+I cannot solve the hashiwokakero puzzle. my output is this:
+
+ 1---6EEE7----4E4 2 
+ 4-2" 2 # 3E8EEE6"2
+ # |2 " #  "  #""
+5EcE7EEaEa==5"6EE8"5
+" #  " " #2# |"|
+" #5===9Ea--8=bE8|4|
+4=5#  " " " # "|"3
+  #2==4 "1-5 # 2|""
+ 2=7-4EEE7=2| 5 |3"
+      4EE3 1 2
+
+
+but i expect this:
+
+
+ 1---6EEE7====4=4=2 
+ 4-2" 2 " 3E8EEE6 2
+ # |2 " "  "  # "
+5EcE7EEaEa==5"6EE8=5
+" #  " # #2#  |
+" #5===9Ea--8=bE8E4|
+4=5#  " # " # " |3
+  #2==4 #1-5 # 2 |"
+ 2=7=4===7=2" 5===3"
+      4==3-1 2

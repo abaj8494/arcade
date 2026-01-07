@@ -1,0 +1,1 @@
+the total number of reachable board positions (sum of the sequence) is 23,475,688, while the total number of possible board positions is 8,589,934,590 (33bit-1) (2^33), so only about 2.2% of all possible board positions can be reached starting with the center vacant.

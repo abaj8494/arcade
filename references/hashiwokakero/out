@@ -1,0 +1,19 @@
+It seems like your recursive backtracking function is not finding the correct solution for the Hashiwokakero puzzle. The issue might be with one 
+of the following:                                                                                                                                
+
+ 1 Base Case: Ensure that check_solved(p) correctly verifies if the puzzle is solved. It should check if all islands have the correct number of  
+   bridges and if all bridges are correctly placed without crossing.                                                                             
+ 2 Building Bridges: The can_build_bridge(p, curr, dir) function must correctly determine if a bridge can be built from the current island in the
+   given direction. This includes checking for existing bridges, ensuring bridges don't cross, and that the bridge leads to another island.      
+ 3 Adding/Removing Bridges: The add_bridge(p, curr, dir) and remove_bridge(p, curr, dir) functions must correctly update the puzzle state,       
+   including the number of bridges connected to each island (curr_bridges) and the total number of bridges in the puzzle (bbridges).             
+ 4 Direction Constants: Make sure that DIRECTIONS is set to the correct number representing all possible directions in which bridges can be      
+   built.                                                                                                                                        
+ 5 Loop Logic: The loop for(int i = 0; i < p->nislands; i++) should iterate over all islands correctly, and the continue statement should        
+   correctly skip islands that have already reached their maximum number of bridges.                                                             
+ 6 Print Statements: Your print statements seem to be using different characters to represent bridges (-, =, |, ", #, a, b, c, E). Ensure that   
+   these are consistent and correctly represent the state of the puzzle.                                                                         
+ 7 Recursive Call: The recursive call if(solve_map(p)) return TRUE; should correctly backtrack if adding a bridge does not lead to a solution.   
+
+To debug this issue, you may want to add more detailed print statements or use a debugger to step through each recursive call and check the state
+of the puzzle at each step. This will help you identify where the logic is failing and why the expected bridges are not being placed correctly.  
