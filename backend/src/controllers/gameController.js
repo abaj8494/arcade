@@ -3,6 +3,7 @@
 // List of available games
 const games = [
   { id: 'towers-of-hanoi', name: 'Towers of Hanoi', image: '/images/hanoi.png', implemented: true },
+  { id: 'tic-tac-toe', name: 'Tic Tac Toe', image: '/images/tictactoe.svg', implemented: true },
   { id: 'connect4', name: 'Connect 4', image: '/images/connect4.png', implemented: false },
   { id: 'sudoku', name: 'Sudoku', image: '/images/sudoku.png', implemented: false },
   { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.png', implemented: false },

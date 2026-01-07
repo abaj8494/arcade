@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import TowersOfHanoi from './pages/TowersOfHanoi';
+import TicTacToe from './pages/TicTacToe';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/game/towers-of-hanoi" element={<TowersOfHanoi />} />
+          <Route path="/game/tic-tac-toe" element={<TicTacToe />} />
           <Route path="/game/connect4" element={<GamePlaceholder name="Connect 4" />} />
           <Route path="/game/sudoku" element={<GamePlaceholder name="Sudoku" />} />
           <Route path="/game/ultimate-tic-tac-toe" element={<GamePlaceholder name="Ultimate Tic Tac Toe" />} />
