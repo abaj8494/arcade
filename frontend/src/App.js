@@ -10,6 +10,7 @@ import UltimateTicTacToe from './pages/UltimateTicTacToe';
 import Chess from './pages/Chess';
 import Tetris from './pages/Tetris';
 import Snake from './pages/Snake';
+import Pong from './pages/Pong';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -28,7 +29,7 @@ function App() {
           <Route path="/game/chess" element={<Chess />} />
           <Route path="/game/tetris" element={<Tetris />} />
           <Route path="/game/snake" element={<Snake />} />
-          <Route path="/game/pong" element={<GamePlaceholder name="Pong" />} />
+          <Route path="/game/pong" element={<Pong />} />
           <Route path="/game/hashiwokakero" element={<GamePlaceholder name="Hashiwokakero" />} />
         </Routes>
       </main>
