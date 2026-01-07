@@ -12,7 +12,7 @@ const games = [
   { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
   { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
   { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
-  { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: false }
+  { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: true }
 ];
 
 // Get all games

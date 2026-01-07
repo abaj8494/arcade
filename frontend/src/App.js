@@ -11,6 +11,7 @@ import Chess from './pages/Chess';
 import Tetris from './pages/Tetris';
 import Snake from './pages/Snake';
 import Pong from './pages/Pong';
+import Hashiwokakero from './pages/Hashiwokakero';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -30,7 +31,7 @@ function App() {
           <Route path="/game/tetris" element={<Tetris />} />
           <Route path="/game/snake" element={<Snake />} />
           <Route path="/game/pong" element={<Pong />} />
-          <Route path="/game/hashiwokakero" element={<GamePlaceholder name="Hashiwokakero" />} />
+          <Route path="/game/hashiwokakero" element={<Hashiwokakero />} />
         </Routes>
       </main>
       <footer className="bg-surface py-4 text-center text-gray-400">
