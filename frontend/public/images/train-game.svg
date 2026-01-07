@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" fill="#1a1a2e" rx="15" ry="15"/>
+
+  <!-- Train car number display -->
+  <rect x="10" y="15" width="80" height="35" fill="#fbbf24" rx="5" stroke="#d97706" stroke-width="2"/>
+
+  <!-- Four digit boxes -->
+  <g fill="#1a1a2e">
+    <rect x="15" y="20" width="15" height="25" rx="2"/>
+    <rect x="33" y="20" width="15" height="25" rx="2"/>
+    <rect x="52" y="20" width="15" height="25" rx="2"/>
+    <rect x="70" y="20" width="15" height="25" rx="2"/>
+  </g>
+
+  <!-- Sample digits -->
+  <g fill="#22c55e" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle">
+    <text x="22.5" y="39">4</text>
+    <text x="40.5" y="39">7</text>
+    <text x="59.5" y="39">2</text>
+    <text x="77.5" y="39">1</text>
+  </g>
+
+  <!-- Equals 10 -->
+  <text x="50" y="65" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#94a3b8" text-anchor="middle">= 10</text>
+
+  <!-- Math operators -->
+  <g fill="#60a5fa" font-family="monospace" font-size="16" font-weight="bold">
+    <text x="15" y="82">+</text>
+    <text x="32" y="82">-</text>
+    <text x="49" y="82">*</text>
+    <text x="66" y="82">/</text>
+    <text x="80" y="82">^</text>
+  </g>
+
+  <!-- Train tracks decoration -->
+  <line x1="0" y1="95" x2="100" y2="95" stroke="#4b5563" stroke-width="3"/>
+  <g stroke="#6b7280" stroke-width="2">
+    <line x1="10" y1="93" x2="10" y2="97"/>
+    <line x1="25" y1="93" x2="25" y2="97"/>
+    <line x1="40" y1="93" x2="40" y2="97"/>
+    <line x1="55" y1="93" x2="55" y2="97"/>
+    <line x1="70" y1="93" x2="70" y2="97"/>
+    <line x1="85" y1="93" x2="85" y2="97"/>
+  </g>
+</svg>

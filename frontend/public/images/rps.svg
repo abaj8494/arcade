@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" fill="#1e3a5f" rx="15" ry="15"/>
+
+  <!-- Rock -->
+  <ellipse cx="25" cy="35" rx="15" ry="12" fill="#6b7280" stroke="#4b5563" stroke-width="1.5"/>
+  <ellipse cx="25" cy="33" rx="12" ry="9" fill="#9ca3af"/>
+
+  <!-- Paper -->
+  <g transform="translate(50, 20)">
+    <rect x="0" y="0" width="25" height="32" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1" rx="2"/>
+    <line x1="4" y1="8" x2="21" y2="8" stroke="#9ca3af" stroke-width="1.5"/>
+    <line x1="4" y1="14" x2="21" y2="14" stroke="#9ca3af" stroke-width="1.5"/>
+    <line x1="4" y1="20" x2="16" y2="20" stroke="#9ca3af" stroke-width="1.5"/>
+  </g>
+
+  <!-- Scissors -->
+  <g transform="translate(35, 55)">
+    <ellipse cx="8" cy="8" rx="8" ry="6" fill="#ef4444" stroke="#dc2626" stroke-width="1"/>
+    <ellipse cx="22" cy="8" rx="8" ry="6" fill="#ef4444" stroke="#dc2626" stroke-width="1"/>
+    <path d="M8,14 L20,30" stroke="#6b7280" stroke-width="4" stroke-linecap="round"/>
+    <path d="M22,14 L10,30" stroke="#6b7280" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="15" cy="22" r="3" fill="#9ca3af"/>
+  </g>
+
+  <!-- VS text -->
+  <text x="50" y="53" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#fbbf24" text-anchor="middle">VS</text>
+</svg>

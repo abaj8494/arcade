@@ -12,7 +12,12 @@ const games = [
   { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
   { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
   { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
-  { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: true }
+  { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: true },
+  { id: 'knights-tour', name: "Knight's Tour", image: '/images/knights-tour.svg', implemented: true },
+  { id: 'game-of-life', name: 'Game of Life', image: '/images/game-of-life.svg', implemented: true },
+  { id: 'rock-paper-scissors', name: 'Rock Paper Scissors', image: '/images/rps.svg', implemented: true },
+  { id: 'sydney-train-game', name: 'Sydney Train Game', image: '/images/train-game.svg', implemented: true },
+  { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true }
 ];
 
 // Get all games

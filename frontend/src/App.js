@@ -12,6 +12,11 @@ import Tetris from './pages/Tetris';
 import Snake from './pages/Snake';
 import Pong from './pages/Pong';
 import Hashiwokakero from './pages/Hashiwokakero';
+import KnightsTour from './pages/KnightsTour';
+import GameOfLife from './pages/GameOfLife';
+import RockPaperScissors from './pages/RockPaperScissors';
+import SydneyTrainGame from './pages/SydneyTrainGame';
+import PegSolitaire from './pages/PegSolitaire';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -32,6 +37,11 @@ function App() {
           <Route path="/game/snake" element={<Snake />} />
           <Route path="/game/pong" element={<Pong />} />
           <Route path="/game/hashiwokakero" element={<Hashiwokakero />} />
+          <Route path="/game/knights-tour" element={<KnightsTour />} />
+          <Route path="/game/game-of-life" element={<GameOfLife />} />
+          <Route path="/game/rock-paper-scissors" element={<RockPaperScissors />} />
+          <Route path="/game/sydney-train-game" element={<SydneyTrainGame />} />
+          <Route path="/game/peg-solitaire" element={<PegSolitaire />} />
         </Routes>
       </main>
       <footer className="bg-surface py-4 text-center text-gray-400">
