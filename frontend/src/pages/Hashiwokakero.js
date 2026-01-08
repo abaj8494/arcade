@@ -522,17 +522,23 @@ const Hashiwokakero = () => {
       return visited.size === n;
     };
 
-    // Recursive solver
+    // Recursive solver with proper constraint checking
     const solve = (edgeCounts) => {
-      // Find first unsatisfied island
+      // FIRST: Check ALL islands for oversatisfied (bug fix)
+      for (const island of islandsList) {
+        const current = countBridges(island.id, edgeCounts);
+        if (current > island.bridges) {
+          return null; // Over-satisfied, invalid state
+        }
+      }
+
+      // THEN: Find first unsatisfied island
       let targetIsland = null;
       for (const island of islandsList) {
         const current = countBridges(island.id, edgeCounts);
         if (current < island.bridges) {
           targetIsland = island;
           break;
-        } else if (current > island.bridges) {
-          return null; // Over-satisfied, invalid state
         }
       }
 
@@ -541,8 +547,8 @@ const Hashiwokakero = () => {
         return isConnected(edgeCounts) ? edgeCounts : null;
       }
 
-      const current = countBridges(targetIsland.id, edgeCounts);
-      const needed = targetIsland.bridges - current;
+      const currentCount = countBridges(targetIsland.id, edgeCounts);
+      const needed = targetIsland.bridges - currentCount;
 
       // Get valid edges we can add bridges to
       const validEdges = [];
@@ -556,15 +562,18 @@ const Hashiwokakero = () => {
         // Check if this edge would cross existing bridges
         if (edgeCount === 0 && wouldCross(key, edgeCounts)) continue;
 
-        validEdges.push({ key, neighbour, canAdd: Math.min(2 - edgeCount, neighbour.bridges - neighbourCurrent) });
+        const canAdd = Math.min(2 - edgeCount, neighbour.bridges - neighbourCurrent);
+        validEdges.push({ key, neighbour, canAdd });
       }
 
       // Calculate total available
       const totalAvailable = validEdges.reduce((sum, e) => sum + e.canAdd, 0);
       if (totalAvailable < needed) return null; // Can't satisfy this island
 
+      // Sort edges by constraint (fewer options = try first for better pruning)
+      validEdges.sort((a, b) => a.canAdd - b.canAdd);
+
       // Try adding bridges recursively
-      // Use a simple approach: try adding one bridge at a time to each valid edge
       for (const { key } of validEdges) {
         const newCounts = { ...edgeCounts };
         newCounts[key] = (newCounts[key] || 0) + 1;
