@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 // Board layouts - null = invalid, 0 = empty, 1 = peg
 const BOARDS = {
@@ -53,6 +54,7 @@ const PegSolitaire = () => {
   const [solutionMoves, setSolutionMoves] = useState([]);
   const [noSolutionFound, setNoSolutionFound] = useState(false);
   const solveIntervalRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   function cloneBoard(layout) {
     return layout.map(row => [...row]);
@@ -414,7 +416,10 @@ const PegSolitaire = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">Peg Solitaire</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Peg Solitaire</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Remove all pegs except one in the centre</p>
 
       {/* Board Type Selection */}
@@ -533,16 +538,18 @@ const PegSolitaire = () => {
       </div>
 
       {/* Instructions */}
-      <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Click a peg to select it</li>
-          <li>Click a valid empty hole to jump to it</li>
-          <li>Pegs can only jump over adjacent pegs</li>
-          <li>The jumped-over peg is removed</li>
-          <li>Goal: Leave exactly 1 peg in the centre</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Click a peg to select it</li>
+            <li>Click a valid empty hole to jump to it</li>
+            <li>Pegs can only jump over adjacent pegs</li>
+            <li>The jumped-over peg is removed</li>
+            <li>Goal: Leave exactly 1 peg in the centre</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

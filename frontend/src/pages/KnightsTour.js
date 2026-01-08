@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const BOARD_SIZE = 8;
 const CELL_SIZE = 60;
@@ -22,6 +23,7 @@ const KnightsTour = () => {
   const [showHints, setShowHints] = useState(true);
   const [history, setHistory] = useState([]);
   const solveTimeoutRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   function createEmptyBoard() {
     return Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(0));
@@ -232,7 +234,10 @@ const KnightsTour = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">Knight's Tour</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Knight's Tour</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Visit all 64 squares with a knight</p>
 
       {/* Status */}
@@ -317,16 +322,18 @@ const KnightsTour = () => {
       </div>
 
       {/* Instructions */}
-      <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Click to place the knight, then move it like in chess</li>
-          <li>Visit all 64 squares exactly once</li>
-          <li>Green squares show valid moves</li>
-          <li>Numbers show how many onward moves are available (Warnsdorff's hint)</li>
-          <li>Lower numbers = safer choices</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Click to place the knight, then move it like in chess</li>
+            <li>Visit all 64 squares exactly once</li>
+            <li>Green squares show valid moves</li>
+            <li>Numbers show how many onward moves are available (Warnsdorff's hint)</li>
+            <li>Lower numbers = safer choices</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

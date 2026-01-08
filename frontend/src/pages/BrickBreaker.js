@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 640;
@@ -32,6 +33,7 @@ const BrickBreaker = () => {
     const saved = localStorage.getItem('brickBreaker_highScore');
     return saved ? parseInt(saved, 10) : 0;
   });
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   // Game state refs for animation loop
   const gameRef = useRef({
@@ -337,7 +339,10 @@ const BrickBreaker = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">Brick Breaker</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Brick Breaker</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Break all the bricks!</p>
 
       {/* Score display */}
@@ -413,15 +418,17 @@ const BrickBreaker = () => {
       </div>
 
       {/* Instructions */}
-      <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Move paddle with arrow keys, A/D, or mouse</li>
-          <li>Press Space to start/pause</li>
-          <li>Break all bricks to win</li>
-          <li>Don't let the ball fall!</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Move paddle with arrow keys, A/D, or mouse</li>
+            <li>Press Space to start/pause</li>
+            <li>Break all bricks to win</li>
+            <li>Don't let the ball fall!</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

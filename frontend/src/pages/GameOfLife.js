@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CELL_SIZE = 15;
 const DEFAULT_ROWS = 40;
@@ -48,6 +49,7 @@ const GameOfLife = () => {
   const [generation, setGeneration] = useState(0);
   const [speed, setSpeed] = useState(100);
   const [isDrawing, setIsDrawing] = useState(false);
+  const { showHelp, toggleHelp } = useHelpVisibility();
   const runningRef = useRef(isRunning);
   const speedRef = useRef(speed);
 
@@ -188,7 +190,10 @@ const GameOfLife = () => {
 
   return (
     <div className="flex flex-col items-center" onMouseUp={handleMouseUp}>
-      <h1 className="text-3xl font-bold mb-2">Conway's Game of Life</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Conway's Game of Life</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">A cellular automaton simulation</p>
 
       {/* Stats */}
@@ -284,15 +289,17 @@ const GameOfLife = () => {
       </div>
 
       {/* Rules */}
-      <div className="mt-4 p-4 bg-surface rounded-lg max-w-lg text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">Rules:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Live cell with 2-3 neighbours survives</li>
-          <li>Dead cell with exactly 3 neighbours becomes alive</li>
-          <li>All other cells die or stay dead</li>
-          <li>Click or drag to draw cells</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="mt-4 p-4 bg-surface rounded-lg max-w-lg text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">Rules:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Live cell with 2-3 neighbours survives</li>
+            <li>Dead cell with exactly 3 neighbours becomes alive</li>
+            <li>All other cells die or stay dead</li>
+            <li>Click or drag to draw cells</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

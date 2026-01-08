@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const WINNING_COMBINATIONS = [
   [0, 1, 2], // rows
@@ -19,6 +20,7 @@ const TicTacToe = () => {
   const [winner, setWinner] = useState(null);
   const [winningLine, setWinningLine] = useState(null);
   const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const checkWinner = useCallback((squares) => {
     for (const [a, b, c] of WINNING_COMBINATIONS) {
@@ -95,7 +97,10 @@ const TicTacToe = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-6">Tic Tac Toe</h1>
+      <div className="flex items-center gap-4 mb-6">
+        <h1 className="text-3xl font-bold">Tic Tac Toe</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       {/* Score Board */}
       <div className="mb-6 p-4 bg-surface rounded-lg">
@@ -170,10 +175,12 @@ const TicTacToe = () => {
       </div>
 
       {/* Game Rules */}
-      <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-center text-gray-400 text-sm">
-        <p>Take turns placing X and O on the board.</p>
-        <p>First to get three in a row wins!</p>
-      </div>
+      {showHelp && (
+        <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-center text-gray-400 text-sm">
+          <p>Take turns placing X and O on the board.</p>
+          <p>First to get three in a row wins!</p>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

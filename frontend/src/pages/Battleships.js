@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const GRID_SIZE = 10;
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -86,6 +87,37 @@ const checkAllSunk = (grid, hits) => {
   return true;
 };
 
+// Check if a ship is sunk (standalone function for use in callbacks)
+const checkShipSunk = (grid, hitRow, hitCol, currentHits) => {
+  const cell = grid[hitRow][hitCol];
+  if (!cell) return null;
+
+  const { shipIndex, isHorizontal: shipHoriz } = cell;
+  const ship = SHIPS[shipIndex];
+
+  // Find ship start position
+  let startRow = hitRow, startCol = hitCol;
+  if (shipHoriz) {
+    while (startCol > 0 && grid[startRow][startCol - 1]?.shipIndex === shipIndex) {
+      startCol--;
+    }
+  } else {
+    while (startRow > 0 && grid[startRow - 1][startCol]?.shipIndex === shipIndex) {
+      startRow--;
+    }
+  }
+
+  // Check if all segments are hit
+  for (let i = 0; i < ship.size; i++) {
+    const r = shipHoriz ? startRow : startRow + i;
+    const c = shipHoriz ? startCol + i : startCol;
+    if (r === hitRow && c === hitCol) continue; // This is the current hit
+    if (!currentHits[r][c]) return null;
+  }
+
+  return ship.name;
+};
+
 const Battleships = () => {
   // Game phases: 'placement', 'waiting', 'battle', 'gameover'
   const [gamePhase, setGamePhase] = useState('placement');
@@ -103,83 +135,130 @@ const Battleships = () => {
 
   // Battle state
   const [isMyTurn, setIsMyTurn] = useState(false);
-  const [lastAttack, setLastAttack] = useState(null);
+  const [lastAttack, setLastAttack] = useState(null); // Last attack I made
+  const [lastHitReceived, setLastHitReceived] = useState(null); // Last hit received from opponent
   const [message, setMessage] = useState('');
   const [winner, setWinner] = useState(null);
+
+  // Track sunk ships
+  const [mySunkShips, setMySunkShips] = useState([]); // Ships opponent has sunk
+  const [opponentSunkShips, setOpponentSunkShips] = useState([]); // Ships I have sunk
+
+  // Help visibility
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   // Wireless state
   const [showWirelessModal, setShowWirelessModal] = useState(false);
   const [opponentReady, setOpponentReady] = useState(false);
   const wirelessRef = useRef(null);
 
+  // Refs to avoid stale closures in callbacks
+  const myGridRef = useRef(myGrid);
+  const gamePhaseRef = useRef(gamePhase);
+  const opponentReadyRef = useRef(opponentReady);
+
+  // Keep refs in sync
+  useEffect(() => { myGridRef.current = myGrid; }, [myGrid]);
+  useEffect(() => { gamePhaseRef.current = gamePhase; }, [gamePhase]);
+  useEffect(() => { opponentReadyRef.current = opponentReady; }, [opponentReady]);
+
   // Handle incoming moves from opponent
   const handleOpponentMove = useCallback((data, from) => {
     const wireless = wirelessRef.current;
     if (!wireless) return;
+
+    const currentGrid = myGridRef.current;
+    const currentPhase = gamePhaseRef.current;
+
     if (data.type === 'attack') {
       const { row, col } = data;
-      const hit = myGrid[row][col] !== null;
+      const hit = currentGrid[row][col] !== null;
 
-      // Update my hits received
+      // Highlight the incoming attack immediately
+      setLastHitReceived({ row, col, hit });
+
+      // Update my hits received and check for loss
       setMyHits(prev => {
         const newHits = prev.map(r => [...r]);
         newHits[row][col] = hit ? 'hit' : 'miss';
+
+        // Send result back (do this inside setState to have correct state)
+        const sunkShip = hit ? checkShipSunk(currentGrid, row, col, prev) : null;
+        wireless.sendMove({
+          type: 'attackResult',
+          row,
+          col,
+          hit,
+          sunk: sunkShip
+        });
+
+        // Track if my ship was sunk
+        if (sunkShip) {
+          setMySunkShips(prev => [...prev, sunkShip]);
+        }
+
+        // Check if I lost (count all hits including this one)
+        if (hit && checkAllSunk(currentGrid, newHits)) {
+          setWinner('opponent');
+          setGamePhase('gameover');
+          wireless.sendMove({ type: 'gameOver', winner: 'me' });
+        } else {
+          // Only switch turns on a miss - hits give opponent another turn
+          if (!hit) {
+            setIsMyTurn(true);
+            setMessage('They missed! Your turn!');
+          } else {
+            setMessage(sunkShip ? `They sunk your ${sunkShip}!` : 'They hit your ship!');
+          }
+        }
+
         return newHits;
       });
-
-      // Send result back
-      wireless.sendMove({
-        type: 'attackResult',
-        row,
-        col,
-        hit,
-        sunk: hit ? checkShipSunk(myGrid, row, col, myHits) : null
-      });
-
-      // Check if I lost
-      const newHits = myHits.map(r => [...r]);
-      newHits[row][col] = true;
-      if (hit && checkAllSunk(myGrid, newHits)) {
-        setWinner('opponent');
-        setGamePhase('gameover');
-        wireless.sendMove({ type: 'gameOver', winner: 'me' });
-      } else {
-        setIsMyTurn(true);
-        setMessage(hit ? 'They hit your ship!' : 'They missed!');
-      }
     } else if (data.type === 'attackResult') {
       const { row, col, hit, sunk } = data;
 
       setOpponentHits(prev => {
         const newHits = prev.map(r => [...r]);
         newHits[row][col] = hit ? 'hit' : 'miss';
+
+        setLastAttack({ row, col, hit });
+
+        // Track if I sunk an opponent's ship
+        if (sunk) {
+          setOpponentSunkShips(prev => [...prev, sunk]);
+        }
+
+        if (hit) {
+          // Hit - get another turn!
+          setIsMyTurn(true);
+          setMessage(sunk ? `You sunk their ${sunk}! Fire again!` : 'Hit! Fire again!');
+
+          // Count total hits to check for win
+          let hitCount = 0;
+          for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+              if (newHits[r][c] === 'hit') hitCount++;
+            }
+          }
+          // Total ship cells: 5+4+3+3+2 = 17
+          if (hitCount >= 17) {
+            setWinner('me');
+            setGamePhase('gameover');
+          }
+        } else {
+          // Miss - opponent's turn
+          setMessage("Miss! Opponent's turn...");
+        }
+
         return newHits;
       });
-
-      setLastAttack({ row, col, hit });
-      setMessage(hit ? (sunk ? `You sunk their ${sunk}!` : 'Hit!') : 'Miss!');
-
-      if (hit) {
-        // Check after state update if we won
-        const newHits = opponentHits.map(r => [...r]);
-        newHits[row][col] = 'hit';
-        let hitCount = 0;
-        for (let r = 0; r < GRID_SIZE; r++) {
-          for (let c = 0; c < GRID_SIZE; c++) {
-            if (newHits[r][c] === 'hit') hitCount++;
-          }
-        }
-        // Total ship cells: 5+4+3+3+2 = 17
-        if (hitCount >= 17) {
-          setWinner('me');
-          setGamePhase('gameover');
-        }
-      }
     } else if (data.type === 'ready') {
       setOpponentReady(true);
-      if (gamePhase === 'waiting') {
-        // Both ready - determine who goes first (host goes first)
+      opponentReadyRef.current = true;
+      if (currentPhase === 'waiting') {
+        // Both ready - determine who goes first (player 1 goes first)
         setGamePhase('battle');
+        gamePhaseRef.current = 'battle';
         setIsMyTurn(wireless.isPlayer1);
         setMessage(wireless.isPlayer1 ? 'Your turn - attack!' : "Opponent's turn...");
       }
@@ -187,7 +266,7 @@ const Battleships = () => {
       setWinner(data.winner === 'me' ? 'opponent' : 'me');
       setGamePhase('gameover');
     }
-  }, [myGrid, myHits, opponentHits, gamePhase]);
+  }, []);
 
   // Handle game state sync
   const handleStateSync = useCallback((data, from) => {
@@ -210,37 +289,6 @@ const Battleships = () => {
       setMessage('Connected! Place your ships.');
     }
   }, [wireless.isConnected]);
-
-  // Check if a ship is sunk
-  const checkShipSunk = (grid, hitRow, hitCol, currentHits) => {
-    const cell = grid[hitRow][hitCol];
-    if (!cell) return null;
-
-    const { shipIndex, isHorizontal: shipHoriz } = cell;
-    const ship = SHIPS[shipIndex];
-
-    // Find ship start position
-    let startRow = hitRow, startCol = hitCol;
-    if (shipHoriz) {
-      while (startCol > 0 && grid[startRow][startCol - 1]?.shipIndex === shipIndex) {
-        startCol--;
-      }
-    } else {
-      while (startRow > 0 && grid[startRow - 1][startCol]?.shipIndex === shipIndex) {
-        startRow--;
-      }
-    }
-
-    // Check if all segments are hit
-    for (let i = 0; i < ship.size; i++) {
-      const r = shipHoriz ? startRow : startRow + i;
-      const c = shipHoriz ? startCol + i : startCol;
-      if (r === hitRow && c === hitCol) continue; // This is the current hit
-      if (!currentHits[r][c]) return null;
-    }
-
-    return ship.name;
-  };
 
   // Handle placement click
   const handlePlacementClick = (row, col) => {
@@ -283,7 +331,7 @@ const Battleships = () => {
     if (opponentHits[row][col] !== null) return; // Already attacked
 
     setIsMyTurn(false);
-    setMessage("Opponent's turn...");
+    setMessage("Firing...");
 
     wireless.sendMove({
       type: 'attack',
@@ -298,11 +346,14 @@ const Battleships = () => {
 
     if (wireless.isConnected) {
       setGamePhase('waiting');
+      gamePhaseRef.current = 'waiting';
       setMessage('Waiting for opponent...');
       wireless.sendMove({ type: 'ready' });
 
-      if (opponentReady) {
+      // Use ref to check if opponent already sent ready
+      if (opponentReadyRef.current) {
         setGamePhase('battle');
+        gamePhaseRef.current = 'battle';
         setIsMyTurn(wireless.isPlayer1);
         setMessage(wireless.isPlayer1 ? 'Your turn - attack!' : "Opponent's turn...");
       }
@@ -339,9 +390,12 @@ const Battleships = () => {
     setHoverCells([]);
     setIsMyTurn(false);
     setLastAttack(null);
+    setLastHitReceived(null);
     setMessage('');
     setWinner(null);
     setOpponentReady(false);
+    setMySunkShips([]);
+    setOpponentSunkShips([]);
   };
 
   // Render cell for player's grid
@@ -349,6 +403,7 @@ const Battleships = () => {
     const cell = myGrid[row][col];
     const hit = myHits[row][col];
     const isHover = hoverCells.some(h => h.row === row && h.col === col);
+    const isLastHit = lastHitReceived?.row === row && lastHitReceived?.col === col;
 
     let bgClass = 'bg-blue-900';
     if (cell) {
@@ -360,18 +415,21 @@ const Battleships = () => {
     }
 
     return (
-      <div
+      <motion.div
         key={`${row}-${col}`}
         className={`w-7 h-7 sm:w-8 sm:h-8 border border-blue-700 ${bgClass}
           flex items-center justify-center cursor-pointer transition-all
-          ${gamePhase === 'placement' ? 'hover:brightness-125' : ''}`}
+          ${gamePhase === 'placement' ? 'hover:brightness-125' : ''}
+          ${isLastHit ? 'ring-2 ring-yellow-400 ring-inset' : ''}`}
         onClick={() => gamePhase === 'placement' && handlePlacementClick(row, col)}
         onMouseEnter={() => gamePhase === 'placement' && handlePlacementHover(row, col)}
         onMouseLeave={() => setHoverCells([])}
+        animate={isLastHit ? { scale: [1, 1.15, 1] } : {}}
+        transition={{ duration: 0.3 }}
       >
         {hit === 'hit' && <div className="w-4 h-4 rounded-full bg-red-500" />}
         {hit === 'miss' && <div className="w-3 h-3 rounded-full bg-white/30" />}
-      </div>
+      </motion.div>
     );
   };
 
@@ -391,11 +449,13 @@ const Battleships = () => {
         key={`${row}-${col}`}
         className={`w-7 h-7 sm:w-8 sm:h-8 border border-gray-600 ${bgClass}
           flex items-center justify-center transition-all
-          ${canAttack ? 'cursor-crosshair hover:bg-gray-500' : 'cursor-default'}`}
+          ${canAttack ? 'cursor-crosshair hover:bg-gray-500' : 'cursor-default'}
+          ${isLast ? 'ring-2 ring-yellow-400 ring-inset' : ''}`}
         onClick={() => canAttack && handleAttackClick(row, col)}
-        animate={isLast ? { scale: [1, 1.2, 1] } : {}}
+        animate={isLast ? { scale: [1, 1.15, 1] } : {}}
+        transition={{ duration: 0.3 }}
       >
-        {hit === 'hit' && <span className="text-white text-lg">X</span>}
+        {hit === 'hit' && <span className="text-white text-lg font-bold">X</span>}
         {hit === 'miss' && <div className="w-2 h-2 rounded-full bg-white/50" />}
       </motion.div>
     );
@@ -410,6 +470,7 @@ const Battleships = () => {
           isActive={wireless.isConnected}
           disabled={gamePhase === 'battle'}
         />
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
       </div>
 
       {/* Connection status */}
@@ -463,34 +524,14 @@ const Battleships = () => {
       )}
 
       {/* Grids Container */}
-      <div className="flex flex-col lg:flex-row gap-8 items-center">
-        {/* My Grid */}
-        <div className="flex flex-col items-center">
-          <h3 className="text-lg font-semibold mb-2">Your Fleet</h3>
-          <div className="flex">
-            <div className="w-7 sm:w-8" /> {/* Spacer for labels */}
-            {LETTERS.map(letter => (
-              <div key={letter} className="w-7 h-6 sm:w-8 flex items-center justify-center text-xs text-gray-400">
-                {letter}
-              </div>
-            ))}
-          </div>
-          {Array(GRID_SIZE).fill(null).map((_, row) => (
-            <div key={row} className="flex">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-gray-400">
-                {row + 1}
-              </div>
-              {Array(GRID_SIZE).fill(null).map((_, col) => renderMyCell(row, col))}
-            </div>
-          ))}
-        </div>
-
-        {/* Opponent Grid (during battle) */}
-        {(gamePhase === 'battle' || gamePhase === 'gameover') && (
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 items-center lg:items-start">
+        {/* My Fleet Section */}
+        <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+          {/* My Grid */}
           <div className="flex flex-col items-center">
-            <h3 className="text-lg font-semibold mb-2">Enemy Waters</h3>
+            <h3 className="text-lg font-semibold mb-2">Your Fleet</h3>
             <div className="flex">
-              <div className="w-7 sm:w-8" />
+              <div className="w-7 sm:w-8" /> {/* Spacer for labels */}
               {LETTERS.map(letter => (
                 <div key={letter} className="w-7 h-6 sm:w-8 flex items-center justify-center text-xs text-gray-400">
                   {letter}
@@ -502,9 +543,97 @@ const Battleships = () => {
                 <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-gray-400">
                   {row + 1}
                 </div>
-                {Array(GRID_SIZE).fill(null).map((_, col) => renderOpponentCell(row, col))}
+                {Array(GRID_SIZE).fill(null).map((_, col) => renderMyCell(row, col))}
               </div>
             ))}
+          </div>
+
+          {/* My Ships Status */}
+          {(gamePhase === 'battle' || gamePhase === 'gameover') && (
+            <div className="flex flex-col gap-1 min-w-[100px]">
+              <h4 className="text-sm font-semibold text-gray-400 mb-1">Your Ships</h4>
+              {SHIPS.map(ship => {
+                const isSunk = mySunkShips.includes(ship.name);
+                return (
+                  <div
+                    key={ship.name}
+                    className={`flex items-center gap-2 px-2 py-1 rounded text-xs transition-all ${
+                      isSunk
+                        ? 'bg-gray-700 text-gray-500 line-through'
+                        : ship.colour + ' text-white'
+                    }`}
+                  >
+                    <span className="flex-1">{ship.name}</span>
+                    <span className="flex gap-0.5">
+                      {Array(ship.size).fill(null).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`w-2 h-2 rounded-sm ${
+                            isSunk ? 'bg-gray-600' : 'bg-white/30'
+                          }`}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Enemy Section */}
+        {(gamePhase === 'battle' || gamePhase === 'gameover') && (
+          <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+            {/* Enemy Ships Status */}
+            <div className="flex flex-col gap-1 min-w-[100px] order-2 sm:order-1">
+              <h4 className="text-sm font-semibold text-gray-400 mb-1">Enemy Ships</h4>
+              {SHIPS.map(ship => {
+                const isSunk = opponentSunkShips.includes(ship.name);
+                return (
+                  <div
+                    key={ship.name}
+                    className={`flex items-center gap-2 px-2 py-1 rounded text-xs transition-all ${
+                      isSunk
+                        ? 'bg-red-900/50 text-red-400 line-through'
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    <span className="flex-1">{ship.name}</span>
+                    <span className="flex gap-0.5">
+                      {Array(ship.size).fill(null).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`w-2 h-2 rounded-sm ${
+                            isSunk ? 'bg-red-500' : 'bg-gray-600'
+                          }`}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Opponent Grid */}
+            <div className="flex flex-col items-center order-1 sm:order-2">
+              <h3 className="text-lg font-semibold mb-2">Enemy Waters</h3>
+              <div className="flex">
+                <div className="w-7 sm:w-8" />
+                {LETTERS.map(letter => (
+                  <div key={letter} className="w-7 h-6 sm:w-8 flex items-center justify-center text-xs text-gray-400">
+                    {letter}
+                  </div>
+                ))}
+              </div>
+              {Array(GRID_SIZE).fill(null).map((_, row) => (
+                <div key={row} className="flex">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-gray-400">
+                    {row + 1}
+                  </div>
+                  {Array(GRID_SIZE).fill(null).map((_, col) => renderOpponentCell(row, col))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -562,16 +691,19 @@ const Battleships = () => {
       </div>
 
       {/* Instructions */}
-      <div className="mt-6 p-4 bg-surface rounded-lg max-w-lg text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Connect with another player using the WiFi button</li>
-          <li>Place your 5 ships on the grid (click to place, button to rotate)</li>
-          <li>Once both players are ready, take turns attacking</li>
-          <li>Click enemy waters to fire - red = hit, white = miss</li>
-          <li>Sink all enemy ships to win!</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="mt-6 p-4 bg-surface rounded-lg max-w-lg text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Connect with another player using the WiFi button</li>
+            <li>Place your 5 ships on the grid (click to place, button to rotate)</li>
+            <li>Once both players are ready, take turns attacking</li>
+            <li>Click enemy waters to fire - red = hit, white = miss</li>
+            <li><span className="text-green-400">Hit = fire again!</span> Miss = opponent's turn</li>
+            <li>Sink all enemy ships to win!</li>
+          </ul>
+        </div>
+      )}
 
       {/* Wireless Modal */}
       <WirelessModal

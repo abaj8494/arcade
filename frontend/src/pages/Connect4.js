@@ -3,15 +3,30 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
-const ROWS = 6;
-const COLS = 7;
 const EMPTY = null;
 const PLAYER_1 = 'red';
 const PLAYER_2 = 'yellow';
 
+// Board size presets
+const BOARD_SIZES = {
+  standard: { rows: 6, cols: 7, label: 'Standard (6×7)' },
+  large: { rows: 7, cols: 8, label: 'Large (7×8)' },
+  xlarge: { rows: 8, cols: 9, label: 'X-Large (8×9)' }
+};
+
 const Connect4 = () => {
-  const [board, setBoard] = useState(() => createEmptyBoard());
+  const [boardSize, setBoardSize] = useState('standard');
+  const rows = BOARD_SIZES[boardSize].rows;
+  const cols = BOARD_SIZES[boardSize].cols;
+  const { showHelp, toggleHelp } = useHelpVisibility();
+
+  const createEmptyBoard = useCallback(() => {
+    return Array(rows).fill(null).map(() => Array(cols).fill(EMPTY));
+  }, [rows, cols]);
+
+  const [board, setBoard] = useState(() => Array(6).fill(null).map(() => Array(7).fill(EMPTY)));
   const [currentPlayer, setCurrentPlayer] = useState(PLAYER_1);
   const [winner, setWinner] = useState(null);
   const [winningCells, setWinningCells] = useState([]);
@@ -30,11 +45,19 @@ const Connect4 = () => {
   const [myColour, setMyColour] = useState(null); // 'red' or 'yellow'
   const wirelessMoveRef = useRef(null);
 
-  function createEmptyBoard() {
-    return Array(ROWS).fill(null).map(() => Array(COLS).fill(EMPTY));
-  }
+  // Reset board when size changes
+  useEffect(() => {
+    setBoard(createEmptyBoard());
+    setCurrentPlayer(PLAYER_1);
+    setWinner(null);
+    setWinningCells([]);
+    setLastAiMove(null);
+    setAnimatingCell(null);
+  }, [boardSize, createEmptyBoard]);
 
   const checkWinner = useCallback((board) => {
+    const numRows = board.length;
+    const numCols = board[0]?.length || 0;
     const directions = [
       [0, 1],   // horizontal
       [1, 0],   // vertical
@@ -42,8 +65,8 @@ const Connect4 = () => {
       [1, -1],  // diagonal down-left
     ];
 
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
+    for (let row = 0; row < numRows; row++) {
+      for (let col = 0; col < numCols; col++) {
         const cell = board[row][col];
         if (!cell) continue;
 
@@ -53,8 +76,8 @@ const Connect4 = () => {
           let c = col + dc;
 
           while (
-            r >= 0 && r < ROWS &&
-            c >= 0 && c < COLS &&
+            r >= 0 && r < numRows &&
+            c >= 0 && c < numCols &&
             board[r][c] === cell
           ) {
             cells.push([r, c]);
@@ -78,7 +101,8 @@ const Connect4 = () => {
   }, []);
 
   const getLowestEmptyRow = useCallback((board, col) => {
-    for (let row = ROWS - 1; row >= 0; row--) {
+    const numRows = board.length;
+    for (let row = numRows - 1; row >= 0; row--) {
       if (board[row][col] === EMPTY) {
         return row;
       }
@@ -194,6 +218,8 @@ const Connect4 = () => {
 
   // AI Logic with Minimax
   const evaluateBoard = useCallback((board, player) => {
+    const numRows = board.length;
+    const numCols = board[0]?.length || 0;
     const opponent = player === PLAYER_1 ? PLAYER_2 : PLAYER_1;
     let score = 0;
 
@@ -213,39 +239,39 @@ const Connect4 = () => {
     };
 
     // Horizontal windows
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col <= COLS - 4; col++) {
+    for (let row = 0; row < numRows; row++) {
+      for (let col = 0; col <= numCols - 4; col++) {
         const window = [board[row][col], board[row][col+1], board[row][col+2], board[row][col+3]];
         score += evaluateWindow(window);
       }
     }
 
     // Vertical windows
-    for (let row = 0; row <= ROWS - 4; row++) {
-      for (let col = 0; col < COLS; col++) {
+    for (let row = 0; row <= numRows - 4; row++) {
+      for (let col = 0; col < numCols; col++) {
         const window = [board[row][col], board[row+1][col], board[row+2][col], board[row+3][col]];
         score += evaluateWindow(window);
       }
     }
 
     // Diagonal windows (down-right)
-    for (let row = 0; row <= ROWS - 4; row++) {
-      for (let col = 0; col <= COLS - 4; col++) {
+    for (let row = 0; row <= numRows - 4; row++) {
+      for (let col = 0; col <= numCols - 4; col++) {
         const window = [board[row][col], board[row+1][col+1], board[row+2][col+2], board[row+3][col+3]];
         score += evaluateWindow(window);
       }
     }
 
     // Diagonal windows (down-left)
-    for (let row = 0; row <= ROWS - 4; row++) {
-      for (let col = 3; col < COLS; col++) {
+    for (let row = 0; row <= numRows - 4; row++) {
+      for (let col = 3; col < numCols; col++) {
         const window = [board[row][col], board[row+1][col-1], board[row+2][col-2], board[row+3][col-3]];
         score += evaluateWindow(window);
       }
     }
 
     // Centre column preference
-    const centreCol = Math.floor(COLS / 2);
+    const centreCol = Math.floor(numCols / 2);
     const centreCount = board.filter((row) => row[centreCol] === player).length;
     score += centreCount * 3;
 
@@ -253,6 +279,7 @@ const Connect4 = () => {
   }, []);
 
   const minimax = useCallback((board, depth, alpha, beta, isMaximizing, player) => {
+    const numCols = board[0]?.length || 0;
     const result = checkWinner(board);
     if (result) {
       if (result.winner === PLAYER_2) return 1000 - depth;
@@ -264,7 +291,7 @@ const Connect4 = () => {
     }
 
     const validCols = [];
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < numCols; col++) {
       if (board[0][col] === EMPTY) validCols.push(col);
     }
 
@@ -306,11 +333,12 @@ const Connect4 = () => {
   }, [getLowestEmptyRow, checkWinner]);
 
   const getAiMove = useCallback(() => {
+    const numCols = board[0]?.length || 7;
     const depths = { easy: 2, medium: 5, hard: 7 };
     const depth = depths[aiDifficulty];
 
     const validCols = [];
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < numCols; col++) {
       if (board[0][col] === EMPTY) validCols.push(col);
     }
 
@@ -338,8 +366,9 @@ const Connect4 = () => {
     let bestScore = -Infinity;
 
     // Order columns to check centre first (better pruning)
+    const centreCol = Math.floor(numCols / 2);
     const orderedCols = [...validCols].sort((a, b) =>
-      Math.abs(a - 3) - Math.abs(b - 3)
+      Math.abs(a - centreCol) - Math.abs(b - centreCol)
     );
 
     for (const col of orderedCols) {
@@ -430,6 +459,7 @@ const Connect4 = () => {
           isActive={connectionState === 'connected' || connectionState === 'waiting'}
           disabled={gameMode === 'ai'}
         />
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
       </div>
 
       {/* Wireless connection status */}
@@ -472,6 +502,20 @@ const Connect4 = () => {
         </div>
       )}
 
+      {/* Board Size Selection */}
+      <div className="mb-4 flex gap-2 flex-wrap justify-center">
+        {Object.entries(BOARD_SIZES).map(([key, { label }]) => (
+          <button
+            key={key}
+            onClick={() => setBoardSize(key)}
+            className={`btn text-sm ${boardSize === key ? 'bg-teal-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+            disabled={connectionState === 'connected'}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Score Board */}
       <div className="mb-4 p-4 bg-surface rounded-lg">
         <div className="flex gap-8 text-center">
@@ -506,18 +550,18 @@ const Connect4 = () => {
       </motion.div>
 
       {/* Game Board */}
-      <div className="relative bg-blue-600 p-2 rounded-lg shadow-xl">
+      <div className="relative bg-blue-600 p-2 rounded-lg shadow-xl overflow-x-auto">
         {/* Column hover indicators */}
         <div className="flex gap-1 mb-1">
-          {Array(COLS).fill(null).map((_, col) => (
+          {Array(cols).fill(null).map((_, col) => (
             <div
               key={col}
-              className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center"
+              className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center"
               onMouseEnter={() => setHoverCol(col)}
               onMouseLeave={() => setHoverCol(null)}
               onClick={() => handleColumnClick(col)}
             >
-              {hoverCol === col && !winner && !isAiThinking && board[0][col] === EMPTY && (
+              {hoverCol === col && !winner && !isAiThinking && board[0]?.[col] === EMPTY && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 0.5, y: 0 }}
@@ -531,14 +575,14 @@ const Connect4 = () => {
         </div>
 
         {/* Board grid */}
-        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}>
+        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
           {board.map((row, rowIndex) =>
             row.map((cell, colIndex) => {
               const isAnimating = animatingCell?.row === rowIndex && animatingCell?.col === colIndex;
               return (
                 <div
                   key={`${rowIndex}-${colIndex}`}
-                  className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-700 rounded-full flex items-center justify-center cursor-pointer relative overflow-hidden"
+                  className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 bg-blue-700 rounded-full flex items-center justify-center cursor-pointer relative overflow-hidden"
                   onClick={() => handleColumnClick(colIndex)}
                   onMouseEnter={() => setHoverCol(colIndex)}
                   onMouseLeave={() => setHoverCol(null)}

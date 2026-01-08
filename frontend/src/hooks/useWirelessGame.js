@@ -20,6 +20,19 @@ export function useWirelessGame(gameType, onMove, onState) {
   const wsRef = useRef(null);
   const pingIntervalRef = useRef(null);
 
+  // Keep callbacks in refs to avoid stale closures
+  const onMoveRef = useRef(onMove);
+  const onStateRef = useRef(onState);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onMoveRef.current = onMove;
+  }, [onMove]);
+
+  useEffect(() => {
+    onStateRef.current = onState;
+  }, [onState]);
+
   // Clean up
   const cleanup = useCallback(() => {
     if (pingIntervalRef.current) {
@@ -76,11 +89,11 @@ export function useWirelessGame(gameType, onMove, onState) {
               break;
 
             case 'move':
-              if (onMove) onMove(msg.data, msg.from);
+              if (onMoveRef.current) onMoveRef.current(msg.data, msg.from);
               break;
 
             case 'state':
-              if (onState) onState(msg.data, msg.from);
+              if (onStateRef.current) onStateRef.current(msg.data, msg.from);
               break;
 
             case 'opponentLeft':
@@ -121,7 +134,7 @@ export function useWirelessGame(gameType, onMove, onState) {
       setConnectionState(ConnectionState.ERROR);
       setError('Failed to connect');
     }
-  }, [cleanup, send, gameType, onMove, onState, connectionState]);
+  }, [cleanup, send, gameType]);
 
   // Disconnect
   const disconnect = useCallback(() => {

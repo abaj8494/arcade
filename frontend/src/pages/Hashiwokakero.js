@@ -4,7 +4,11 @@ import { motion } from 'framer-motion';
 import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CELL_SIZE = 50;
-const API_BASE = process.env.REACT_APP_API_URL || 'https://arcade.abaj.ai';
+
+// Use the correct API URL based on the environment
+const API_URL = window.location.hostname === 'arcade.abaj.ai'
+  ? 'https://arcade.abaj.ai/api'
+  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Hashiwokakero = () => {
   const [difficulty, setDifficulty] = useState('easy');
@@ -33,7 +37,7 @@ const Hashiwokakero = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/games/hashiwokakero/generate?difficulty=${diff}`);
+      const response = await fetch(`${API_URL}/games/hashiwokakero/generate?difficulty=${diff}`);
       if (!response.ok) {
         throw new Error('Failed to fetch puzzle');
       }

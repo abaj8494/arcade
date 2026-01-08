@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 // Use the correct API URL based on the environment
 const API_URL = window.location.hostname === 'arcade.abaj.ai' 
@@ -17,6 +18,7 @@ const TowersOfHanoi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const animationRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
   
   // Initialize towers based on numDiscs
   useEffect(() => {
@@ -117,7 +119,10 @@ const TowersOfHanoi = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col items-center">
-        <h1 className="text-3xl font-bold mb-4">Towers of Hanoi</h1>
+        <div className="flex items-center gap-4 mb-4">
+          <h1 className="text-3xl font-bold">Towers of Hanoi</h1>
+          <HelpButton onClick={toggleHelp} isActive={showHelp} />
+        </div>
         
         <div className="mb-8 p-4 bg-surface rounded-lg w-full max-w-md">
           <div className="flex items-center justify-between mb-4">

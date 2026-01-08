@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CHOICES = ['rock', 'paper', 'scissors'];
 
@@ -24,6 +25,7 @@ const RockPaperScissors = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [streak, setStreak] = useState({ count: 0, type: null });
   const [history, setHistory] = useState([]);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const getComputerChoice = useCallback(() => {
     return CHOICES[Math.floor(Math.random() * CHOICES.length)];
@@ -106,7 +108,10 @@ const RockPaperScissors = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Rock Paper Scissors</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Rock Paper Scissors</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       {/* Scoreboard */}
       <div className="mb-6 p-4 bg-surface rounded-lg">

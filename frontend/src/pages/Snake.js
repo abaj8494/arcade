@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 20;
@@ -18,6 +19,7 @@ const Snake = () => {
     const saved = localStorage.getItem('snakeHighScore');
     return saved ? parseInt(saved) : 0;
   });
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const directionRef = useRef(direction);
   const gameLoopRef = useRef(null);
@@ -251,7 +253,10 @@ const Snake = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Snake</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Snake</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       <div className="flex gap-6">
         {/* Game Board */}
@@ -326,12 +331,14 @@ const Snake = () => {
           </div>
 
           {/* Controls */}
-          <div className="bg-surface p-4 rounded-lg text-sm text-gray-400">
-            <div className="font-semibold text-white mb-2">Controls:</div>
-            <div>Arrow keys to move</div>
-            <div>P to pause</div>
-            <div className="mt-2 text-xs">On mobile: Swipe to change direction</div>
-          </div>
+          {showHelp && (
+            <div className="bg-surface p-4 rounded-lg text-sm text-gray-400">
+              <div className="font-semibold text-white mb-2">Controls:</div>
+              <div>Arrow keys to move</div>
+              <div>P to pause</div>
+              <div className="mt-2 text-xs">On mobile: Swipe to change direction</div>
+            </div>
+          )}
         </div>
       </div>
 

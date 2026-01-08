@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 // Piece definitions
 const PIECES = {
@@ -23,6 +24,69 @@ const PIECE_VALUES = {
   [PIECES.wR]: 500, [PIECES.wQ]: 900, [PIECES.wK]: 20000,
   [PIECES.bP]: 100, [PIECES.bN]: 320, [PIECES.bB]: 330,
   [PIECES.bR]: 500, [PIECES.bQ]: 900, [PIECES.bK]: 20000,
+};
+
+// Piece letters for algebraic notation
+const PIECE_LETTERS = {
+  [PIECES.wN]: 'N', [PIECES.bN]: 'N',
+  [PIECES.wB]: 'B', [PIECES.bB]: 'B',
+  [PIECES.wR]: 'R', [PIECES.bR]: 'R',
+  [PIECES.wQ]: 'Q', [PIECES.bQ]: 'Q',
+  [PIECES.wK]: 'K', [PIECES.bK]: 'K',
+};
+
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+// Convert move to algebraic notation
+const toAlgebraic = (move) => {
+  const { from, to, piece, captured, special, promoteTo, isCheck, isCheckmate } = move;
+  const [fromRow, fromCol] = from;
+  const [toRow, toCol] = to;
+
+  // Castling
+  if (special === 'castle') {
+    return toCol === 6 ? 'O-O' : 'O-O-O';
+  }
+
+  let notation = '';
+
+  // Piece letter (not for pawns)
+  if (!isPawn(piece)) {
+    notation += PIECE_LETTERS[piece] || '';
+  }
+
+  // For pawn captures, include the file
+  if (isPawn(piece) && captured) {
+    notation += FILES[fromCol];
+  }
+
+  // Capture symbol
+  if (captured || special === 'ep') {
+    notation += 'x';
+  }
+
+  // Destination square
+  notation += FILES[toCol] + RANKS[toRow];
+
+  // En passant notation
+  if (special === 'ep') {
+    notation += ' e.p.';
+  }
+
+  // Pawn promotion
+  if (promoteTo) {
+    notation += '=' + (PIECE_LETTERS[promoteTo] || 'Q');
+  }
+
+  // Check or checkmate
+  if (isCheckmate) {
+    notation += '#';
+  } else if (isCheck) {
+    notation += '+';
+  }
+
+  return notation;
 };
 
 const isWhite = (piece) => piece >= 1 && piece <= 6;
@@ -60,7 +124,10 @@ const Chess = () => {
   const [promotionSquare, setPromotionSquare] = useState(null);
   const [lastMove, setLastMove] = useState(null);
   const [showMoveHints, setShowMoveHints] = useState(true);
+  const [showNotation, setShowNotation] = useState(true);
   const aiTimeoutRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
+  const notationRef = useRef(null);
 
   // Wireless state
   const [showWirelessModal, setShowWirelessModal] = useState(false);
@@ -378,21 +445,35 @@ const Chess = () => {
     setCastlingRights(newCastling);
     setEnPassantSquare(newEnPassant);
     setLastMove({ from: [fromRow, fromCol], to: [toRow, toCol] });
-    setMoveHistory(prev => [...prev, { from: [fromRow, fromCol], to: [toRow, toCol], piece, captured }]);
+
+    const nextPlayer = white ? 'black' : 'white';
+
+    // Check game status and determine if this move gives check/checkmate
+    const status = getGameStatus(newBoard, !white, newCastling, newEnPassant);
+    const givesCheck = isInCheck(newBoard, !white);
+    const isCheckmate = status === (white ? 'black_wins' : 'white_wins');
+
+    setMoveHistory(prev => [...prev, {
+      from: [fromRow, fromCol],
+      to: [toRow, toCol],
+      piece,
+      captured,
+      special,
+      promoteTo,
+      isCheck: givesCheck && !isCheckmate,
+      isCheckmate
+    }]);
     setSelectedSquare(null);
     setValidMoves([]);
 
-    const nextPlayer = white ? 'black' : 'white';
     setCurrentPlayer(nextPlayer);
 
-    // Check game status
-    const status = getGameStatus(newBoard, !white, newCastling, newEnPassant);
     if (status) {
       setGameOver(status);
     }
 
     return true;
-  }, [board, castlingRights, getGameStatus]);
+  }, [board, castlingRights, getGameStatus, isInCheck]);
 
   // Wireless game hook
   const handleWirelessMove = useCallback((move) => {
@@ -708,6 +789,26 @@ const Chess = () => {
     return turnText;
   };
 
+  // Auto-scroll notation panel to bottom
+  useEffect(() => {
+    if (notationRef.current) {
+      notationRef.current.scrollTop = notationRef.current.scrollHeight;
+    }
+  }, [moveHistory]);
+
+  // Group moves into pairs for display
+  const getMovePairs = () => {
+    const pairs = [];
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      pairs.push({
+        num: Math.floor(i / 2) + 1,
+        white: moveHistory[i] ? toAlgebraic(moveHistory[i]) : '',
+        black: moveHistory[i + 1] ? toAlgebraic(moveHistory[i + 1]) : ''
+      });
+    }
+    return pairs;
+  };
+
   return (
     <div className="flex flex-col items-center">
       <div className="flex items-center gap-4 mb-4">
@@ -717,6 +818,7 @@ const Chess = () => {
           isActive={connectionState === 'connected' || connectionState === 'waiting'}
           disabled={gameMode === 'ai'}
         />
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
       </div>
 
       {/* Wireless connection status */}
@@ -771,40 +873,45 @@ const Chess = () => {
         {getStatusText()}
       </motion.div>
 
-      {/* Board */}
-      <div className="relative">
-        <div className="grid grid-cols-8 border-4 border-amber-900 rounded">
-          {board.map((row, rowIndex) =>
-            row.map((piece, colIndex) => (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className={getSquareClass(rowIndex, colIndex)}
-                onClick={() => handleSquareClick(rowIndex, colIndex)}
-              >
-                {piece !== 0 && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className={isWhite(piece) ? 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-gray-900'}
-                    style={{ textShadow: isWhite(piece) ? '0 0 3px #000' : 'none' }}
-                  >
-                    {PIECE_SYMBOLS[piece]}
-                  </motion.span>
-                )}
+      {/* Board and Notation Sidebar */}
+      <div className="flex justify-center items-start w-full">
+        {/* Left spacer for balance */}
+        <div className="hidden sm:block w-40 sm:w-48 flex-shrink-0" />
 
-                {/* Valid move indicator */}
-                {showMoveHints && validMoves.some(m => m[0] === rowIndex && m[1] === colIndex) && (
-                  <div className={`absolute w-3 h-3 rounded-full ${
-                    board[rowIndex][colIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
-                  }`} />
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        {/* Board - centered */}
+        <div className="relative mx-4">
+          <div className="grid grid-cols-8 border-4 border-amber-900 rounded">
+            {board.map((row, rowIndex) =>
+              row.map((piece, colIndex) => (
+                <div
+                  key={`${rowIndex}-${colIndex}`}
+                  className={getSquareClass(rowIndex, colIndex)}
+                  onClick={() => handleSquareClick(rowIndex, colIndex)}
+                >
+                  {piece !== 0 && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className={isWhite(piece) ? 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-gray-900'}
+                      style={{ textShadow: isWhite(piece) ? '0 0 3px #000' : 'none' }}
+                    >
+                      {PIECE_SYMBOLS[piece]}
+                    </motion.span>
+                  )}
 
-        {/* Promotion dialog */}
-        {promotionSquare && (
+                  {/* Valid move indicator */}
+                  {showMoveHints && validMoves.some(m => m[0] === rowIndex && m[1] === colIndex) && (
+                    <div className={`absolute w-3 h-3 rounded-full ${
+                      board[rowIndex][colIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
+                    }`} />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Promotion dialog */}
+          {promotionSquare && (
           <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
             <div className="bg-surface p-4 rounded-lg">
               <p className="text-center mb-2">Choose promotion:</p>
@@ -824,17 +931,39 @@ const Chess = () => {
             </div>
           </div>
         )}
-      </div>
 
-      {/* File labels */}
-      <div className="flex mt-1">
-        {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(f => (
-          <div key={f} className="w-10 sm:w-14 text-center text-gray-400 text-sm">{f}</div>
-        ))}
+          {/* File labels */}
+          <div className="flex mt-1">
+            {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(f => (
+              <div key={f} className="w-10 sm:w-14 text-center text-gray-400 text-sm">{f}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* Notation Sidebar - right pane */}
+        <div className={`bg-surface rounded-lg p-3 w-40 sm:w-48 flex-shrink-0 hidden sm:block ${showNotation ? '' : 'invisible'}`}>
+            <div className="text-white font-semibold mb-2 text-sm">Moves</div>
+            <div
+              ref={notationRef}
+              className="max-h-64 sm:max-h-80 overflow-y-auto text-sm font-mono"
+            >
+              {moveHistory.length === 0 ? (
+                <div className="text-gray-500 text-xs">No moves yet</div>
+              ) : (
+                getMovePairs().map((pair, idx) => (
+                  <div key={idx} className="flex gap-2 py-0.5">
+                    <span className="text-gray-500 w-6">{pair.num}.</span>
+                    <span className="text-white w-14">{pair.white}</span>
+                    <span className="text-gray-300 w-14">{pair.black}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
       </div>
 
       {/* Controls */}
-      <div className="flex gap-4 mt-4">
+      <div className="flex gap-4 mt-4 flex-wrap justify-center">
         <button onClick={resetGame} className="btn btn-primary">
           New Game
         </button>
@@ -844,10 +973,16 @@ const Chess = () => {
         >
           Hints {showMoveHints ? 'ON' : 'OFF'}
         </button>
+        <button
+          onClick={() => setShowNotation(!showNotation)}
+          className={`btn hidden sm:block ${showNotation ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+        >
+          Notation {showNotation ? 'ON' : 'OFF'}
+        </button>
       </div>
 
-      {/* Move count */}
-      <div className="mt-4 text-gray-400">
+      {/* Move count (shown on mobile where notation is hidden) */}
+      <div className="mt-4 text-gray-400 sm:hidden">
         Moves: {moveHistory.length}
       </div>
 

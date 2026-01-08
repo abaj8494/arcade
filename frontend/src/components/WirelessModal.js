@@ -52,11 +52,17 @@ export const WirelessModal = ({
 }) => {
   if (!isOpen) return null;
 
-  const handleClose = () => {
+  // Close and disconnect (for X button and Cancel)
+  const handleCloseAndDisconnect = () => {
     if (connectionState === ConnectionState.WAITING ||
         connectionState === ConnectionState.CONNECTED) {
       onDisconnect();
     }
+    onClose();
+  };
+
+  // Just close modal (for Start Playing)
+  const handleJustClose = () => {
     onClose();
   };
 
@@ -67,7 +73,7 @@ export const WirelessModal = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-        onClick={handleClose}
+        onClick={handleCloseAndDisconnect}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -83,7 +89,7 @@ export const WirelessModal = ({
               <h2 className="text-xl font-bold">Wireless Play</h2>
             </div>
             <button
-              onClick={handleClose}
+              onClick={handleCloseAndDisconnect}
               className="text-gray-400 hover:text-white text-2xl leading-none"
             >
               &times;
@@ -101,7 +107,7 @@ export const WirelessModal = ({
                 You are Player {playerNum}
               </p>
               <button
-                onClick={handleClose}
+                onClick={handleJustClose}
                 className="btn bg-primary hover:bg-indigo-600 w-full"
               >
                 Start Playing
@@ -122,7 +128,7 @@ export const WirelessModal = ({
                 Ask your friend to press the wireless button on their device
               </p>
               <button
-                onClick={handleClose}
+                onClick={handleCloseAndDisconnect}
                 className="btn bg-gray-600 hover:bg-gray-500 w-full"
               >
                 Cancel
@@ -155,7 +161,7 @@ export const WirelessModal = ({
                 Try Again
               </button>
               <button
-                onClick={handleClose}
+                onClick={handleCloseAndDisconnect}
                 className="btn bg-gray-600 hover:bg-gray-500 w-full"
               >
                 Cancel

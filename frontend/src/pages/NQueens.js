@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const NQueens = () => {
   const [boardSize, setBoardSize] = useState(8);
@@ -11,6 +12,7 @@ const NQueens = () => {
   const [currentSolutionIndex, setCurrentSolutionIndex] = useState(0);
   const [message, setMessage] = useState('');
   const solveIntervalRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   // Check if a position is under attack
   const isUnderAttack = useCallback((queens, row, col) => {
@@ -183,7 +185,10 @@ const NQueens = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">N-Queens</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">N-Queens</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Place {boardSize} queens so none can attack each other</p>
 
       {/* Board size selection */}
@@ -344,16 +349,18 @@ const NQueens = () => {
       </div>
 
       {/* Instructions */}
-      <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Click a cell to place or remove a queen</li>
-          <li>Queens attack horizontally, vertically, and diagonally</li>
-          <li>Place N queens so none can attack each other</li>
-          <li>Red highlights show threatened squares</li>
-          <li>Use "Find All Solutions" to see all possibilities</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Click a cell to place or remove a queen</li>
+            <li>Queens attack horizontally, vertically, and diagonally</li>
+            <li>Place N queens so none can attack each other</li>
+            <li>Red highlights show threatened squares</li>
+            <li>Use "Find All Solutions" to see all possibilities</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

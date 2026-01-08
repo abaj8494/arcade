@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 500;
@@ -18,6 +19,7 @@ const Pong = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [scores, setScores] = useState({ player1: 0, player2: 0 });
   const [winner, setWinner] = useState(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const gameStateRef = useRef({
     paddle1Y: CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2,
@@ -271,7 +273,10 @@ const Pong = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Pong</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Pong</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       {/* Game Mode Selection */}
       <div className="mb-4 flex gap-4">
@@ -361,12 +366,14 @@ const Pong = () => {
       </div>
 
       {/* Controls Info */}
-      <div className="mt-4 bg-surface p-4 rounded-lg text-sm text-gray-400 text-center">
-        <div className="font-semibold text-white mb-2">Controls</div>
-        <div>Player 1: W (up) / S (down)</div>
-        {gameMode === '2player' && <div>Player 2: ↑ (up) / ↓ (down)</div>}
-        <div className="mt-1">P to pause • First to {WINNING_SCORE} wins</div>
-      </div>
+      {showHelp && (
+        <div className="mt-4 bg-surface p-4 rounded-lg text-sm text-gray-400 text-center">
+          <div className="font-semibold text-white mb-2">Controls</div>
+          <div>Player 1: W (up) / S (down)</div>
+          {gameMode === '2player' && <div>Player 2: ↑ (up) / ↓ (down)</div>}
+          <div className="mt-1">P to pause • First to {WINNING_SCORE} wins</div>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

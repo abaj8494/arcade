@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const TARGET = 10;
 const OPERATORS = ['+', '-', '*', '/', '^'];
@@ -14,6 +15,7 @@ const SydneyTrainGame = () => {
   const [userExpression, setUserExpression] = useState('');
   const [userResult, setUserResult] = useState(null);
   const [streak, setStreak] = useState(0);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   // Generate random 4-digit number
   const generateDigits = useCallback(() => {
@@ -170,7 +172,10 @@ const SydneyTrainGame = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">Sydney Train Game</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Sydney Train Game</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Make {TARGET} using all 4 digits</p>
 
       {/* Streak */}
@@ -297,16 +302,18 @@ const SydneyTrainGame = () => {
       )}
 
       {/* Instructions */}
-      <div className="mt-6 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Use all 4 digits exactly once</li>
-          <li>Combine them with +, -, *, /, or ^ to make {TARGET}</li>
-          <li>You can use parentheses for grouping</li>
-          <li>Example: 1,2,2,5 → (5-2)*(2+1)+1 = {TARGET}</li>
-          <li>Popular on Sydney trains - look at car numbers!</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="mt-6 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Use all 4 digits exactly once</li>
+            <li>Combine them with +, -, *, /, or ^ to make {TARGET}</li>
+            <li>You can use parentheses for grouping</li>
+            <li>Example: 1,2,2,5 → (5-2)*(2+1)+1 = {TARGET}</li>
+            <li>Popular on Sydney trains - look at car numbers!</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const Sudoku = () => {
   const [board, setBoard] = useState(() => createEmptyBoard());
@@ -15,6 +16,7 @@ const Sudoku = () => {
   const [timer, setTimer] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [showHighlights, setShowHighlights] = useState(true);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   function createEmptyBoard() {
     return Array(9).fill(null).map(() => Array(9).fill(0));
@@ -372,7 +374,10 @@ const Sudoku = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Sudoku</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Sudoku</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       {/* Difficulty Selection */}
       <div className="mb-4 flex gap-2 flex-wrap justify-center">
@@ -492,10 +497,12 @@ const Sudoku = () => {
       </div>
 
       {/* Instructions */}
-      <div className="text-gray-400 text-sm text-center max-w-md">
-        <p>Click a cell and use number keys or buttons to fill it.</p>
-        <p>Press N to toggle notes mode. Arrow keys to navigate.</p>
-      </div>
+      {showHelp && (
+        <div className="text-gray-400 text-sm text-center max-w-md">
+          <p>Click a cell and use number keys or buttons to fill it.</p>
+          <p>Press N to toggle notes mode. Arrow keys to navigate.</p>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

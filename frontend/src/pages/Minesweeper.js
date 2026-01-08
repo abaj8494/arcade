@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const DIFFICULTIES = {
   beginner: { rows: 9, cols: 9, mines: 10, name: 'Beginner' },
@@ -28,6 +29,7 @@ const Minesweeper = () => {
   const [minesLeft, setMinesLeft] = useState(10);
   const [timer, setTimer] = useState(0);
   const [firstClick, setFirstClick] = useState(true);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const config = DIFFICULTIES[difficulty];
 
@@ -300,7 +302,10 @@ const Minesweeper = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-2">Minesweeper</h1>
+      <div className="flex items-center gap-4 mb-2">
+        <h1 className="text-3xl font-bold">Minesweeper</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Find all the mines without detonating them!</p>
 
       {/* Difficulty selection */}
@@ -393,16 +398,18 @@ const Minesweeper = () => {
       </div>
 
       {/* Instructions */}
-      <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Left click to reveal a cell</li>
-          <li>Right click to flag/unflag a potential mine</li>
-          <li>Double-click a number to reveal adjacent unflagged cells</li>
-          <li>Numbers show how many adjacent mines there are</li>
-          <li>Reveal all non-mine cells to win!</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm mt-4">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Left click to reveal a cell</li>
+            <li>Right click to flag/unflag a potential mine</li>
+            <li>Double-click a number to reveal adjacent unflagged cells</li>
+            <li>Numbers show how many adjacent mines there are</li>
+            <li>Reveal all non-mine cells to win!</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games

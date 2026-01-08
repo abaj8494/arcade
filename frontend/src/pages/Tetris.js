@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
@@ -32,6 +33,7 @@ const Tetris = () => {
     const saved = localStorage.getItem('tetrisHighScore');
     return saved ? parseInt(saved) : 0;
   });
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   const gameLoopRef = useRef(null);
   const lastDropRef = useRef(Date.now());
@@ -373,7 +375,10 @@ const Tetris = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Tetris</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Tetris</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
 
       <div className="flex gap-6">
         {/* Game Board */}
@@ -466,14 +471,16 @@ const Tetris = () => {
           </div>
 
           {/* Controls */}
-          <div className="bg-surface p-4 rounded-lg text-sm text-gray-400">
-            <div className="font-semibold text-white mb-2">Controls:</div>
-            <div>← → Move</div>
-            <div>↑ Rotate</div>
-            <div>↓ Soft drop</div>
-            <div>Space Hard drop</div>
-            <div>P Pause</div>
-          </div>
+          {showHelp && (
+            <div className="bg-surface p-4 rounded-lg text-sm text-gray-400">
+              <div className="font-semibold text-white mb-2">Controls:</div>
+              <div>← → Move</div>
+              <div>↑ Rotate</div>
+              <div>↓ Soft drop</div>
+              <div>Space Hard drop</div>
+              <div>P Pause</div>
+            </div>
+          )}
         </div>
       </div>
 
