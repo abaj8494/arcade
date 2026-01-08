@@ -150,165 +150,200 @@ const UltimateTicTacToe = () => {
     };
   }, [checkWinner]);
 
-  // Get the best move for AI - fast heuristic-based approach (no recursion)
+  // Alpha-beta AI with proper minimax search
   const getAiMove = useCallback((bds, winners, active, difficulty) => {
     const moves = getValidMoves(bds, winners, active);
     if (moves.length === 0) return null;
     if (moves.length === 1) return moves[0];
 
-    const aiPlayer = 'O';
-    const opponent = 'X';
+    const AI = 'O';
+    const HUMAN = 'X';
 
-    // Score a move based on multiple factors
-    const scoreMove = (move) => {
+    // Static evaluation function for non-terminal states
+    const evaluate = (boards, boardWins, player) => {
       let score = 0;
-      const newState = applyMove(bds, winners, move, aiPlayer);
+      const opp = player === AI ? HUMAN : AI;
 
-      // 1. Winning the game is top priority
-      if (newState.result && newState.result.winner === aiPlayer) {
-        return 100000;
-      }
-
-      // 2. Check if this move wins a mini-board
-      if (newState.winners[move.board] === aiPlayer && !winners[move.board]) {
-        score += 2000;
-
-        // Bonus for winning strategic boards
-        if (move.board === 4) score += 1500; // Centre board
-        else if ([0, 2, 6, 8].includes(move.board)) score += 800; // Corner boards
-
-        // Check if winning this board creates a winning threat
-        for (const [a, b, c] of WINNING_COMBINATIONS) {
-          const line = [newState.winners[a], newState.winners[b], newState.winners[c]];
-          const aiCount = line.filter(w => w === aiPlayer).length;
-          const emptyCount = line.filter(w => w === null).length;
-          if (aiCount === 2 && emptyCount === 1) {
-            score += 1000; // Two in a row on main board
-          }
-        }
-      }
-
-      // 3. Block opponent from winning the game
-      const oppState = applyMove(bds, winners, move, opponent);
-      if (oppState.result && oppState.result.winner === opponent) {
-        score += 50000; // Must block!
-      }
-
-      // 4. Block opponent from winning this mini-board
-      if (oppState.winners[move.board] === opponent && !winners[move.board]) {
-        score += 1500;
-
-        // Extra priority if opponent winning this board would win the game
-        for (const [a, b, c] of WINNING_COMBINATIONS) {
-          const line = [
-            a === move.board ? opponent : winners[a],
-            b === move.board ? opponent : winners[b],
-            c === move.board ? opponent : winners[c]
-          ];
-          if (line.every(w => w === opponent)) {
-            score += 30000; // Critical block
-          }
-        }
-      }
-
-      // 5. Strategic position value
-      if (move.board === 4) score += 100; // Centre board
-      else if ([0, 2, 6, 8].includes(move.board)) score += 60; // Corner boards
-
-      if (move.cell === 4) score += 50; // Centre cell
-      else if ([0, 2, 6, 8].includes(move.cell)) score += 30; // Corner cells
-
-      // 6. Evaluate where we send the opponent
-      const sentTo = move.cell;
-      if (newState.active === null) {
-        // We're giving opponent free choice - slightly bad
-        score -= 50;
-      } else if (winners[sentTo]) {
-        // Sending to won board gives free choice - slightly bad
-        score -= 30;
-      } else {
-        // Sending to a board we're winning is good
-        const sentBoard = bds[sentTo];
-        let aiInSent = 0, oppInSent = 0;
-        for (const cell of sentBoard) {
-          if (cell === aiPlayer) aiInSent++;
-          else if (cell === opponent) oppInSent++;
-        }
-        if (aiInSent > oppInSent) score += 40;
-        else if (oppInSent > aiInSent) score -= 20;
-
-        // Sending to centre board when we don't control it is risky
-        if (sentTo === 4 && !winners[4]) score -= 30;
-      }
-
-      // 7. Line building in current mini-board
-      const currentBoard = [...bds[move.board]];
-      currentBoard[move.cell] = aiPlayer;
+      // Evaluate meta-board (which sub-boards are won)
       for (const [a, b, c] of WINNING_COMBINATIONS) {
-        const line = [currentBoard[a], currentBoard[b], currentBoard[c]];
-        const aiCount = line.filter(c => c === aiPlayer).length;
-        const oppCount = line.filter(c => c === opponent).length;
-        const emptyCount = line.filter(c => c === null).length;
+        const line = [boardWins[a], boardWins[b], boardWins[c]];
+        const pCount = line.filter(w => w === player).length;
+        const oCount = line.filter(w => w === opp).length;
+        const open = line.filter(w => w === null).length;
+        const draws = line.filter(w => w === 'draw').length;
 
-        if (aiCount === 2 && emptyCount === 1) score += 80; // Threat in mini-board
-        if (oppCount === 2 && emptyCount === 1) score += 60; // Block threat
-        if (aiCount === 1 && emptyCount === 2) score += 10;
+        if (pCount === 3) score += 10000;
+        else if (oCount === 3) score -= 10000;
+        else if (pCount === 2 && open === 1) score += 500;
+        else if (oCount === 2 && open === 1) score -= 500;
+        else if (pCount === 1 && open === 2 && draws === 0) score += 50;
+        else if (oCount === 1 && open === 2 && draws === 0) score -= 50;
       }
 
-      // 8. Main board line evaluation
-      for (const [a, b, c] of WINNING_COMBINATIONS) {
-        const line = [newState.winners[a], newState.winners[b], newState.winners[c]];
-        const aiCount = line.filter(w => w === aiPlayer).length;
-        const oppCount = line.filter(w => w === opponent).length;
-        const openCount = line.filter(w => w === null).length;
-        const drawCount = line.filter(w => w === 'draw').length;
+      // Strategic board bonuses
+      if (boardWins[4] === player) score += 200;
+      else if (boardWins[4] === opp) score -= 200;
 
-        // Only count lines that aren't blocked
-        if (oppCount === 0 && drawCount === 0) {
-          score += aiCount * 100 + openCount * 20;
+      for (const corner of [0, 2, 6, 8]) {
+        if (boardWins[corner] === player) score += 80;
+        else if (boardWins[corner] === opp) score -= 80;
+      }
+
+      // Evaluate potential in each sub-board
+      for (let b = 0; b < 9; b++) {
+        if (boardWins[b]) continue;
+        const board = boards[b];
+        for (const [a, x, c] of WINNING_COMBINATIONS) {
+          const line = [board[a], board[x], board[c]];
+          const pCount = line.filter(cell => cell === player).length;
+          const oCount = line.filter(cell => cell === opp).length;
+          const empty = line.filter(cell => cell === null).length;
+
+          if (pCount === 2 && empty === 1) score += 20;
+          else if (oCount === 2 && empty === 1) score -= 20;
+          else if (pCount === 1 && empty === 2) score += 2;
+          else if (oCount === 1 && empty === 2) score -= 2;
         }
-        if (aiCount === 0 && drawCount === 0 && oppCount > 0) {
-          score -= oppCount * 80; // Opponent has progress
-        }
+        // Center cell bonus
+        if (board[4] === player) score += 5;
+        else if (board[4] === opp) score -= 5;
       }
 
       return score;
     };
 
-    // Easy mode: add randomness
-    if (difficulty === 'easy') {
-      // 50% chance of random move
-      if (Math.random() < 0.5) {
-        return moves[Math.floor(Math.random() * moves.length)];
+    // Check if game is over
+    const isTerminal = (boardWins) => {
+      const result = checkWinner(boardWins);
+      return result !== null;
+    };
+
+    // Get terminal score
+    const terminalScore = (boardWins, depth) => {
+      const result = checkWinner(boardWins);
+      if (!result) return 0;
+      if (result.winner === AI) return 100000 - depth; // Prefer faster wins
+      if (result.winner === HUMAN) return -100000 + depth; // Prefer slower losses
+      return 0; // Draw
+    };
+
+    // Negamax with alpha-beta pruning
+    const alphabeta = (boards, boardWins, activeBoard, depth, alpha, beta, maximizing) => {
+      if (isTerminal(boardWins)) {
+        const score = terminalScore(boardWins, depth);
+        return maximizing ? score : -score;
       }
-      // Otherwise pick from top 3 moves randomly
-      const scored = moves.map(m => ({ move: m, score: scoreMove(m) }))
-        .sort((a, b) => b.score - a.score);
-      const topMoves = scored.slice(0, Math.min(3, scored.length));
-      return topMoves[Math.floor(Math.random() * topMoves.length)].move;
+
+      if (depth === 0) {
+        const score = evaluate(boards, boardWins, AI);
+        return maximizing ? score : -score;
+      }
+
+      const currentMoves = getValidMoves(boards, boardWins, activeBoard);
+      if (currentMoves.length === 0) {
+        return 0; // Draw
+      }
+
+      // Move ordering: prioritize center cells and winning moves
+      currentMoves.sort((a, b) => {
+        let scoreA = 0, scoreB = 0;
+        if (a.cell === 4) scoreA += 10;
+        if (b.cell === 4) scoreB += 10;
+        if (a.board === 4) scoreA += 5;
+        if (b.board === 4) scoreB += 5;
+        return scoreB - scoreA;
+      });
+
+      const player = maximizing ? AI : HUMAN;
+      let bestScore = -Infinity;
+
+      for (const move of currentMoves) {
+        const newState = applyMove(boards, boardWins, move, player);
+        const score = -alphabeta(
+          newState.boards,
+          newState.winners,
+          newState.active,
+          depth - 1,
+          -beta,
+          -alpha,
+          !maximizing
+        );
+
+        if (score > bestScore) {
+          bestScore = score;
+        }
+        alpha = Math.max(alpha, score);
+        if (alpha >= beta) break; // Beta cutoff
+      }
+
+      return bestScore;
+    };
+
+    // Determine search depth based on difficulty
+    const getDepth = (diff, numMoves) => {
+      if (diff === 'easy') return 1;
+      if (diff === 'medium') return numMoves > 30 ? 3 : 2;
+      // Hard mode: deeper search, but limit based on move count
+      if (numMoves > 50) return 5;
+      if (numMoves > 30) return 4;
+      return 3;
+    };
+
+    const depth = getDepth(difficulty, moves.length);
+
+    // Easy mode: add randomness
+    if (difficulty === 'easy' && Math.random() < 0.4) {
+      return moves[Math.floor(Math.random() * moves.length)];
     }
 
-    // Medium mode: pick best with some randomness among close scores
-    if (difficulty === 'medium') {
-      const scored = moves.map(m => ({ move: m, score: scoreMove(m) }))
-        .sort((a, b) => b.score - a.score);
-      const bestScore = scored[0].score;
-      // Consider moves within 20% of best
-      const threshold = bestScore > 0 ? bestScore * 0.8 : bestScore - 100;
-      const goodMoves = scored.filter(s => s.score >= threshold).slice(0, 3);
-      return goodMoves[Math.floor(Math.random() * goodMoves.length)].move;
-    }
-
-    // Hard mode: always pick the best move
+    // Find best move using alpha-beta
     let bestMove = moves[0];
     let bestScore = -Infinity;
 
-    for (const move of moves) {
-      const score = scoreMove(move);
+    // Sort moves for better pruning
+    const sortedMoves = [...moves].sort((a, b) => {
+      let scoreA = 0, scoreB = 0;
+      // Prioritize center positions
+      if (a.cell === 4) scoreA += 20;
+      if (b.cell === 4) scoreB += 20;
+      if (a.board === 4) scoreA += 10;
+      if (b.board === 4) scoreB += 10;
+      // Check if move wins a board
+      const stateA = applyMove(bds, winners, a, AI);
+      const stateB = applyMove(bds, winners, b, AI);
+      if (stateA.winners[a.board] === AI && !winners[a.board]) scoreA += 100;
+      if (stateB.winners[b.board] === AI && !winners[b.board]) scoreB += 100;
+      return scoreB - scoreA;
+    });
+
+    for (const move of sortedMoves) {
+      const newState = applyMove(bds, winners, move, AI);
+
+      // Check for immediate win
+      if (newState.result && newState.result.winner === AI) {
+        return move;
+      }
+
+      const score = -alphabeta(
+        newState.boards,
+        newState.winners,
+        newState.active,
+        depth - 1,
+        -Infinity,
+        -bestScore,
+        false
+      );
+
       if (score > bestScore) {
         bestScore = score;
         bestMove = move;
       }
+    }
+
+    // Medium mode: occasionally pick a suboptimal move
+    if (difficulty === 'medium' && Math.random() < 0.15) {
+      const goodMoves = sortedMoves.slice(0, Math.min(3, sortedMoves.length));
+      return goodMoves[Math.floor(Math.random() * goodMoves.length)];
     }
 
     return bestMove;
