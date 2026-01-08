@@ -20,6 +20,7 @@ import PegSolitaire from './pages/PegSolitaire';
 import BrickBreaker from './pages/BrickBreaker';
 import NQueens from './pages/NQueens';
 import Minesweeper from './pages/Minesweeper';
+import Battleships from './pages/Battleships';
 import GamePlaceholder from './pages/GamePlaceholder';
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
           <Route path="/game/brick-breaker" element={<BrickBreaker />} />
           <Route path="/game/n-queens" element={<NQueens />} />
           <Route path="/game/minesweeper" element={<Minesweeper />} />
+          <Route path="/game/battleships" element={<Battleships />} />
         </Routes>
       </main>
       <footer className="bg-surface py-4 text-center text-gray-400">

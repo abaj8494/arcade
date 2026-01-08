@@ -20,7 +20,8 @@ const games = [
   { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true },
   { id: 'brick-breaker', name: 'Brick Breaker', image: '/images/brick-breaker.svg', implemented: true },
   { id: 'n-queens', name: 'N-Queens', image: '/images/n-queens.svg', implemented: true },
-  { id: 'minesweeper', name: 'Minesweeper', image: '/images/minesweeper.svg', implemented: true }
+  { id: 'minesweeper', name: 'Minesweeper', image: '/images/minesweeper.svg', implemented: true },
+  { id: 'battleships', name: 'Battleships', image: '/images/battleships.svg', implemented: true }
 ];
 
 // Get all games
