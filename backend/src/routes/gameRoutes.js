@@ -10,6 +10,9 @@ router.get('/', gameController.getGames);
 // Tower of Hanoi endpoints
 router.get('/towers-of-hanoi/solve', gameController.solveTowersOfHanoi);
 
+// Hashiwokakero endpoints
+router.get('/hashiwokakero/generate', gameController.generateHashiPuzzle);
+
 // Other game endpoints will be added later
 
 module.exports = router; 

@@ -4,86 +4,7 @@ import { motion } from 'framer-motion';
 import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CELL_SIZE = 50;
-
-// Sample puzzles
-const PUZZLES = {
-  easy: {
-    size: 7,
-    islands: [
-      { x: 0, y: 0, bridges: 2 },
-      { x: 4, y: 0, bridges: 3 },
-      { x: 6, y: 0, bridges: 1 },
-      { x: 0, y: 2, bridges: 3 },
-      { x: 2, y: 2, bridges: 4 },
-      { x: 4, y: 2, bridges: 4 },
-      { x: 6, y: 2, bridges: 2 },
-      { x: 0, y: 4, bridges: 1 },
-      { x: 2, y: 4, bridges: 3 },
-      { x: 6, y: 4, bridges: 2 },
-      { x: 0, y: 6, bridges: 2 },
-      { x: 2, y: 6, bridges: 3 },
-      { x: 4, y: 6, bridges: 2 },
-      { x: 6, y: 6, bridges: 2 },
-    ]
-  },
-  medium: {
-    size: 9,
-    islands: [
-      { x: 0, y: 0, bridges: 2 },
-      { x: 4, y: 0, bridges: 4 },
-      { x: 8, y: 0, bridges: 2 },
-      { x: 0, y: 2, bridges: 4 },
-      { x: 2, y: 2, bridges: 3 },
-      { x: 4, y: 2, bridges: 2 },
-      { x: 6, y: 2, bridges: 3 },
-      { x: 8, y: 2, bridges: 3 },
-      { x: 0, y: 4, bridges: 3 },
-      { x: 4, y: 4, bridges: 5 },
-      { x: 8, y: 4, bridges: 3 },
-      { x: 0, y: 6, bridges: 4 },
-      { x: 2, y: 6, bridges: 3 },
-      { x: 4, y: 6, bridges: 3 },
-      { x: 6, y: 6, bridges: 2 },
-      { x: 8, y: 6, bridges: 3 },
-      { x: 0, y: 8, bridges: 2 },
-      { x: 4, y: 8, bridges: 3 },
-      { x: 8, y: 8, bridges: 2 },
-    ]
-  },
-  hard: {
-    size: 11,
-    islands: [
-      { x: 0, y: 0, bridges: 3 },
-      { x: 4, y: 0, bridges: 5 },
-      { x: 8, y: 0, bridges: 3 },
-      { x: 10, y: 0, bridges: 2 },
-      { x: 0, y: 2, bridges: 4 },
-      { x: 2, y: 2, bridges: 3 },
-      { x: 4, y: 2, bridges: 2 },
-      { x: 6, y: 2, bridges: 4 },
-      { x: 8, y: 2, bridges: 3 },
-      { x: 10, y: 2, bridges: 3 },
-      { x: 0, y: 4, bridges: 3 },
-      { x: 4, y: 4, bridges: 6 },
-      { x: 6, y: 4, bridges: 4 },
-      { x: 10, y: 4, bridges: 2 },
-      { x: 0, y: 6, bridges: 4 },
-      { x: 2, y: 6, bridges: 4 },
-      { x: 4, y: 6, bridges: 3 },
-      { x: 6, y: 6, bridges: 4 },
-      { x: 8, y: 6, bridges: 3 },
-      { x: 10, y: 6, bridges: 3 },
-      { x: 0, y: 8, bridges: 3 },
-      { x: 4, y: 8, bridges: 5 },
-      { x: 8, y: 8, bridges: 4 },
-      { x: 10, y: 8, bridges: 2 },
-      { x: 0, y: 10, bridges: 2 },
-      { x: 4, y: 10, bridges: 3 },
-      { x: 8, y: 10, bridges: 2 },
-      { x: 10, y: 10, bridges: 2 },
-    ]
-  }
-};
+const API_BASE = process.env.REACT_APP_API_URL || 'https://arcade.abaj.ai';
 
 const Hashiwokakero = () => {
   const [difficulty, setDifficulty] = useState('easy');
@@ -93,32 +14,72 @@ const Hashiwokakero = () => {
   const [selectedIsland, setSelectedIsland] = useState(null);
   const [isSolved, setIsSolved] = useState(false);
   const [solving, setSolving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const solveIntervalRef = useRef(null);
   const { showHelp, toggleHelp } = useHelpVisibility();
 
-  // Initialize puzzle
-  const initPuzzle = useCallback((diff) => {
+  // Fetch puzzle from API
+  const fetchPuzzle = useCallback(async (diff) => {
     if (solveIntervalRef.current) {
       clearInterval(solveIntervalRef.current);
     }
-    const puzzle = PUZZLES[diff];
-    setGridSize(puzzle.size);
-    setIslands(puzzle.islands.map((island, idx) => ({
-      ...island,
-      id: idx,
-      currentBridges: 0
-    })));
+
+    setLoading(true);
+    setBridges([]);
+    setSelectedIsland(null);
+    setIsSolved(false);
+    setSolving(false);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/games/hashiwokakero/generate?difficulty=${diff}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch puzzle');
+      }
+      const puzzle = await response.json();
+
+      setGridSize(puzzle.size);
+      setIslands(puzzle.islands.map((island, idx) => ({
+        ...island,
+        id: idx,
+        currentBridges: 0
+      })));
+    } catch (err) {
+      console.error('Error fetching puzzle:', err);
+      setError('Failed to load puzzle. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load initial puzzle
+  useEffect(() => {
+    fetchPuzzle(difficulty);
+  }, []); // Only run on mount
+
+  // Handle difficulty change
+  const handleDifficultyChange = (diff) => {
+    setDifficulty(diff);
+    fetchPuzzle(diff);
+  };
+
+  // Generate new puzzle with same difficulty
+  const generateNewPuzzle = () => {
+    fetchPuzzle(difficulty);
+  };
+
+  // Reset current puzzle (clear bridges but keep same layout)
+  const resetPuzzle = useCallback(() => {
+    if (solveIntervalRef.current) {
+      clearInterval(solveIntervalRef.current);
+    }
     setBridges([]);
     setSelectedIsland(null);
     setIsSolved(false);
     setSolving(false);
     setError(null);
   }, []);
-
-  useEffect(() => {
-    initPuzzle(difficulty);
-  }, [difficulty, initPuzzle]);
 
   // Find nearest island in a direction
   const findNeighbour = useCallback((island, direction) => {
@@ -884,7 +845,7 @@ const Hashiwokakero = () => {
     );
   }
 
-  if (error) {
+  if (error && !loading) {
     return (
       <div className="flex flex-col items-center">
         <h1 className="text-3xl font-bold mb-4">Hashiwokakero</h1>
@@ -892,7 +853,7 @@ const Hashiwokakero = () => {
           {error}
         </div>
         <button
-          onClick={() => initPuzzle(difficulty)}
+          onClick={() => fetchPuzzle(difficulty)}
           className="btn bg-primary hover:bg-indigo-600"
         >
           Try Again
@@ -917,14 +878,22 @@ const Hashiwokakero = () => {
         {['easy', 'medium', 'hard'].map((diff) => (
           <button
             key={diff}
-            onClick={() => setDifficulty(diff)}
+            onClick={() => handleDifficultyChange(diff)}
             className={`btn ${difficulty === diff ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
-            disabled={solving}
+            disabled={solving || loading}
           >
             {diff.charAt(0).toUpperCase() + diff.slice(1)}
           </button>
         ))}
       </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="mb-4 p-4 bg-blue-600 rounded-lg text-xl font-bold flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+          Generating puzzle...
+        </div>
+      )}
 
       {/* Solved Message */}
       {isSolved && (
@@ -979,16 +948,23 @@ const Hashiwokakero = () => {
       {/* Controls */}
       <div className="mt-4 flex gap-4">
         <button
-          onClick={() => initPuzzle(difficulty)}
+          onClick={generateNewPuzzle}
+          className="btn bg-primary hover:bg-indigo-600"
+          disabled={solving || loading}
+        >
+          {loading ? 'Generating...' : 'New Puzzle'}
+        </button>
+        <button
+          onClick={resetPuzzle}
           className="btn bg-red-500 hover:bg-red-600"
-          disabled={solving}
+          disabled={solving || loading}
         >
           Reset
         </button>
         <button
           onClick={solvePuzzle}
           className="btn bg-green-600 hover:bg-green-500"
-          disabled={solving || isSolved}
+          disabled={solving || isSolved || loading}
         >
           {solving ? 'Solving...' : 'Solve'}
         </button>

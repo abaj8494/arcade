@@ -1,14 +1,16 @@
 // Game controller with endpoints for game data and logic
+const { execSync } = require('child_process');
+const path = require('path');
 
 // List of available games
 const games = [
   { id: 'towers-of-hanoi', name: 'Towers of Hanoi', image: '/images/hanoi.png', implemented: true },
   { id: 'tic-tac-toe', name: 'Tic Tac Toe', image: '/images/tictactoe.svg', implemented: true },
   { id: 'connect4', name: 'Connect 4', image: '/images/connect4.png', implemented: true },
-  { id: 'sudoku', name: 'Sudoku', image: '/images/sudoku.png', implemented: true },
-  { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.png', implemented: true },
-  { id: 'banagrams-solver', name: 'Banagrams Solver', image: '/images/banagrams.png', implemented: false },
-  { id: 'chess', name: 'Chess', image: '/images/chess.png', implemented: true },
+  { id: 'sudoku', name: 'Sudoku', image: '/images/sudoku.svg', implemented: true },
+  { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.svg', implemented: true },
+  { id: 'banagrams-solver', name: 'Banagrams Solver', image: '/images/banagrams.svg', implemented: false },
+  { id: 'chess', name: 'Chess', image: '/images/chess.svg', implemented: true },
   { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
   { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
   { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
@@ -60,9 +62,63 @@ exports.solveTowersOfHanoi = (req, res) => {
   // Call solve function with the starting parameters
   solve(numDiscs, 0, 1, 2);
   
-  res.json({ 
-    numDiscs, 
+  res.json({
+    numDiscs,
     totalMoves: moves.length,
-    moves 
+    moves
   });
+};
+
+// Hashiwokakero puzzle generator
+exports.generateHashiPuzzle = (req, res) => {
+  const difficulty = req.query.difficulty || 'easy';
+
+  // Map difficulty to grid size
+  const sizeMap = {
+    easy: 7,
+    medium: 9,
+    hard: 11
+  };
+
+  const size = sizeMap[difficulty] || 7;
+  const bridgenPath = path.join(__dirname, '../../../references/hashiwokakero/bridgen');
+
+  try {
+    // Execute the bridgen binary to generate a puzzle
+    const output = execSync(`${bridgenPath} ${size}`, {
+      encoding: 'utf8',
+      timeout: 5000
+    });
+
+    // Parse the output into islands
+    const lines = output.trim().split('\n');
+    const islands = [];
+
+    for (let y = 0; y < lines.length; y++) {
+      for (let x = 0; x < lines[y].length; x++) {
+        const ch = lines[y][x];
+        if (ch !== '.') {
+          // Parse bridge count: 1-9 are numeric, a-c are 10-12
+          let bridges;
+          if (ch >= '1' && ch <= '9') {
+            bridges = parseInt(ch);
+          } else if (ch >= 'a' && ch <= 'c') {
+            bridges = 10 + (ch.charCodeAt(0) - 'a'.charCodeAt(0));
+          } else {
+            continue;
+          }
+
+          islands.push({ x, y, bridges });
+        }
+      }
+    }
+
+    res.json({
+      size: lines.length,
+      islands
+    });
+  } catch (err) {
+    console.error('Error generating Hashi puzzle:', err);
+    res.status(500).json({ error: 'Failed to generate puzzle' });
+  }
 }; 
