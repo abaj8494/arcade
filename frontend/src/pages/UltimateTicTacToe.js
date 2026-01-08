@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import useWirelessGame from '../hooks/useWirelessGame';
+import { WirelessButton, WirelessModal } from '../components/WirelessModal';
 
 const WINNING_COMBINATIONS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
@@ -20,10 +22,15 @@ const UltimateTicTacToe = () => {
   const [lastMove, setLastMove] = useState(null);
 
   // AI settings
-  const [gameMode, setGameMode] = useState('2player'); // '2player' or 'ai'
+  const [gameMode, setGameMode] = useState('2player'); // '2player', 'ai', or 'wireless'
   const [aiDifficulty, setAiDifficulty] = useState('medium'); // 'easy', 'medium', 'hard'
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiTimeoutRef = useRef(null);
+
+  // Wireless state
+  const [showWirelessModal, setShowWirelessModal] = useState(false);
+  const [mySymbol, setMySymbol] = useState(null); // 'X' or 'O' in wireless mode
+  const wirelessMoveRef = useRef(null); // Store move handler ref
 
   const checkWinner = useCallback((cells) => {
     for (const [a, b, c] of WINNING_COMBINATIONS) {
@@ -290,6 +297,48 @@ const UltimateTicTacToe = () => {
     setCurrentPlayer(player === 'X' ? 'O' : 'X');
   }, [boards, boardWinners, checkWinner]);
 
+  // Store executeMove in ref for wireless callback
+  useEffect(() => {
+    wirelessMoveRef.current = executeMove;
+  }, [executeMove]);
+
+  // Handle incoming wireless moves
+  const handleWirelessMove = useCallback((data, from) => {
+    if (data.type === 'move' && wirelessMoveRef.current) {
+      const { board: boardIdx, cell: cellIdx, player } = data;
+      wirelessMoveRef.current(boardIdx, cellIdx, player);
+    }
+  }, []);
+
+  // Handle wireless game ready
+  const handleWirelessReady = useCallback(() => {
+    // Will be called when both players are connected
+  }, []);
+
+  // Wireless hook
+  const wireless = useWirelessGame(
+    'ultimate-tic-tac-toe',
+    handleWirelessMove,
+    null,
+    handleWirelessReady
+  );
+
+  // Set symbol when wireless connects
+  useEffect(() => {
+    if (wireless.isConnected && gameMode !== 'wireless') {
+      setMySymbol(wireless.isHost ? 'X' : 'O');
+      setGameMode('wireless');
+      // Reset game for wireless play
+      setBoards(Array(9).fill(null).map(() => Array(9).fill(null)));
+      setBoardWinners(Array(9).fill(null));
+      setCurrentPlayer('X');
+      setActiveBoard(null);
+      setGameWinner(null);
+      setWinningBoards([]);
+      setLastMove(null);
+    }
+  }, [wireless.isConnected, wireless.isHost, gameMode]);
+
   // AI turn effect
   useEffect(() => {
     if (gameMode !== 'ai' || currentPlayer !== 'O' || gameWinner || isAiThinking) {
@@ -320,8 +369,20 @@ const UltimateTicTacToe = () => {
     if (activeBoard !== null && activeBoard !== boardIndex) return;
     // Block clicks during AI's turn
     if (gameMode === 'ai' && currentPlayer === 'O') return;
+    // Block clicks if not my turn in wireless mode
+    if (gameMode === 'wireless' && currentPlayer !== mySymbol) return;
 
     executeMove(boardIndex, cellIndex, currentPlayer);
+
+    // Send move to opponent in wireless mode
+    if (gameMode === 'wireless' && wireless.isConnected) {
+      wireless.sendMove({
+        type: 'move',
+        board: boardIndex,
+        cell: cellIndex,
+        player: currentPlayer
+      });
+    }
   };
 
   const resetGame = () => {
@@ -413,19 +474,33 @@ const UltimateTicTacToe = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Ultimate Tic Tac Toe</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Ultimate Tic Tac Toe</h1>
+        <WirelessButton
+          onClick={() => setShowWirelessModal(true)}
+          isActive={wireless.isConnected}
+          disabled={gameMode === 'ai'}
+        />
+      </div>
+
+      {/* Wireless status */}
+      {wireless.isConnected && (
+        <div className="mb-2 px-3 py-1 rounded-full bg-green-600 text-sm">
+          Wireless: You are {mySymbol} ({wireless.isHost ? 'Host' : 'Guest'})
+        </div>
+      )}
 
       {/* Game Mode Selection */}
       <div className="mb-4 flex gap-4 items-center">
         <div className="flex gap-2">
           <button
-            onClick={() => { setGameMode('2player'); resetGame(); }}
+            onClick={() => { setGameMode('2player'); resetGame(); wireless.disconnect(); }}
             className={`btn text-sm ${gameMode === '2player' ? 'bg-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
           >
             2 Player
           </button>
           <button
-            onClick={() => { setGameMode('ai'); resetGame(); }}
+            onClick={() => { setGameMode('ai'); resetGame(); wireless.disconnect(); }}
             className={`btn text-sm ${gameMode === 'ai' ? 'bg-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
           >
             vs AI
@@ -573,6 +648,20 @@ const UltimateTicTacToe = () => {
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games
       </Link>
+
+      {/* Wireless Modal */}
+      <WirelessModal
+        isOpen={showWirelessModal}
+        onClose={() => setShowWirelessModal(false)}
+        connectionState={wireless.connectionState}
+        roomCode={wireless.roomCode}
+        role={wireless.role}
+        error={wireless.error}
+        onCreateRoom={wireless.createRoom}
+        onJoinRoom={wireless.joinRoom}
+        onDisconnect={wireless.disconnect}
+        gameName="Ultimate Tic Tac Toe"
+      />
     </div>
   );
 };
