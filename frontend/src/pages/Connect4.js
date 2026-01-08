@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import useWirelessGame from '../hooks/useWirelessGame';
+import { WirelessButton, WirelessModal } from '../components/WirelessModal';
 
 const ROWS = 6;
 const COLS = 7;
@@ -22,6 +24,11 @@ const Connect4 = () => {
   const [replayingMove, setReplayingMove] = useState(false);
   const [animatingCell, setAnimatingCell] = useState(null); // { row, col }
   const aiTimeoutRef = useRef(null);
+
+  // Wireless state
+  const [showWirelessModal, setShowWirelessModal] = useState(false);
+  const [myColour, setMyColour] = useState(null); // 'red' or 'yellow'
+  const wirelessMoveRef = useRef(null);
 
   function createEmptyBoard() {
     return Array(ROWS).fill(null).map(() => Array(COLS).fill(EMPTY));
@@ -111,12 +118,85 @@ const Connect4 = () => {
     return { success: true, row };
   }, [board, winner, getLowestEmptyRow, checkWinner]);
 
+  // Wireless game hook
+  const handleWirelessMove = useCallback((move) => {
+    if (wirelessMoveRef.current) {
+      wirelessMoveRef.current(move);
+    }
+  }, []);
+
+  const handleWirelessState = useCallback((state) => {
+    if (state.board) setBoard(state.board);
+    if (state.currentPlayer) setCurrentPlayer(state.currentPlayer);
+    if (state.winner !== undefined) setWinner(state.winner);
+    if (state.winningCells) setWinningCells(state.winningCells);
+  }, []);
+
+  const { status: wirelessStatus, roomCode, createRoom, joinRoom, sendMove, sendState, disconnect } =
+    useWirelessGame('connect4', handleWirelessMove, handleWirelessState);
+
+  // Update wirelessMoveRef with the actual move handler
+  useEffect(() => {
+    wirelessMoveRef.current = (move) => {
+      const { col, player } = move;
+      makeMove(col, player);
+    };
+  }, [makeMove]);
+
+  // Handle wireless connection
+  useEffect(() => {
+    if (wirelessStatus === 'connected') {
+      setShowWirelessModal(false);
+      setGameMode('2player');
+      if (!myColour) {
+        setMyColour('red');
+        setBoard(createEmptyBoard());
+        setCurrentPlayer(PLAYER_1);
+        setWinner(null);
+        setWinningCells([]);
+        sendState({
+          board: createEmptyBoard(),
+          currentPlayer: PLAYER_1,
+          winner: null,
+          winningCells: []
+        });
+      }
+    }
+  }, [wirelessStatus, myColour, sendState]);
+
+  const handleCreateRoom = () => {
+    setMyColour('red');
+    createRoom();
+  };
+
+  const handleJoinRoom = (code) => {
+    setMyColour('yellow');
+    joinRoom(code);
+  };
+
+  const handleDisconnect = () => {
+    disconnect();
+    setMyColour(null);
+    resetGame();
+  };
+
   const handleColumnClick = useCallback((col) => {
     if (winner || isAiThinking) return;
     if (gameMode === 'ai' && currentPlayer === PLAYER_2) return;
 
-    makeMove(col, currentPlayer);
-  }, [winner, isAiThinking, gameMode, currentPlayer, makeMove]);
+    // Check if it's our turn in wireless mode
+    if (wirelessStatus === 'connected' && myColour) {
+      const isMyTurn = (myColour === 'red' && currentPlayer === PLAYER_1) ||
+                       (myColour === 'yellow' && currentPlayer === PLAYER_2);
+      if (!isMyTurn) return;
+    }
+
+    const result = makeMove(col, currentPlayer);
+    // Send move over wireless
+    if (result.success && wirelessStatus === 'connected') {
+      sendMove({ col, player: currentPlayer });
+    }
+  }, [winner, isAiThinking, gameMode, currentPlayer, makeMove, wirelessStatus, myColour, sendMove]);
 
   // AI Logic with Minimax
   const evaluateBoard = useCallback((board, player) => {
@@ -334,7 +414,13 @@ const Connect4 = () => {
     if (winner === 'draw') return "It's a draw!";
     if (winner) return `${winner === PLAYER_1 ? 'Red' : 'Yellow'} wins!`;
     if (isAiThinking) return 'AI is thinking...';
-    return `${currentPlayer === PLAYER_1 ? 'Red' : 'Yellow'}'s turn`;
+    const turnText = `${currentPlayer === PLAYER_1 ? 'Red' : 'Yellow'}'s turn`;
+    if (wirelessStatus === 'connected' && myColour) {
+      const isMyTurn = (myColour === 'red' && currentPlayer === PLAYER_1) ||
+                       (myColour === 'yellow' && currentPlayer === PLAYER_2);
+      return `${turnText} ${isMyTurn ? '(Your turn)' : '(Waiting...)'}`;
+    }
+    return turnText;
   };
 
   const isWinningCell = (row, col) => {
@@ -343,19 +429,35 @@ const Connect4 = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Connect 4</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Connect 4</h1>
+        <WirelessButton
+          onClick={() => wirelessStatus === 'connected' ? handleDisconnect() : setShowWirelessModal(true)}
+          isConnected={wirelessStatus === 'connected'}
+          disabled={gameMode === 'ai'}
+        />
+      </div>
+
+      {/* Wireless connection status */}
+      {wirelessStatus === 'connected' && (
+        <div className="mb-4 text-green-400 text-sm">
+          Connected - Playing as {myColour === 'red' ? 'Red' : 'Yellow'}
+        </div>
+      )}
 
       {/* Game Mode Selection */}
       <div className="mb-4 flex gap-4">
         <button
-          onClick={() => { setGameMode('2player'); resetGame(); }}
-          className={`btn ${gameMode === '2player' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+          onClick={() => { setGameMode('2player'); resetGame(); handleDisconnect(); }}
+          className={`btn ${gameMode === '2player' && wirelessStatus !== 'connected' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+          disabled={wirelessStatus === 'connected'}
         >
           2 Player
         </button>
         <button
-          onClick={() => { setGameMode('ai'); resetGame(); }}
+          onClick={() => { setGameMode('ai'); resetGame(); handleDisconnect(); }}
           className={`btn ${gameMode === 'ai' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+          disabled={wirelessStatus === 'connected'}
         >
           vs AI
         </button>
@@ -492,6 +594,17 @@ const Connect4 = () => {
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games
       </Link>
+
+      {/* Wireless Modal */}
+      <WirelessModal
+        isOpen={showWirelessModal}
+        onClose={() => setShowWirelessModal(false)}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
+        roomCode={roomCode}
+        status={wirelessStatus}
+        gameName="Connect 4"
+      />
     </div>
   );
 };
