@@ -1,33 +1,30 @@
 /**
- * Lightweight WebSocket handler for wireless 2-player games
- * Designed for low memory usage on constrained VPS
+ * Simplified WebSocket handler for wireless 2-player games
+ * Auto-matches players - no room codes needed
  */
 
 const WebSocket = require('ws');
 
-// Single room store - only one active game at a time to save memory
-let activeRoom = null;
+// Waiting player (first to connect)
+let waitingPlayer = null;
+// Active game session
+let activeGame = null;
 let cleanupTimer = null;
 
-const ROOM_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const PING_INTERVAL = 30000; // 30 seconds
+const GAME_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-// Generate short 4-digit room code
-function generateRoomCode() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
-// Clean up room
-function cleanupRoom() {
-  if (activeRoom) {
-    if (activeRoom.host && activeRoom.host.readyState === WebSocket.OPEN) {
-      activeRoom.host.close();
+// Clean up game
+function cleanupGame() {
+  if (activeGame) {
+    if (activeGame.player1?.readyState === WebSocket.OPEN) {
+      activeGame.player1.close();
     }
-    if (activeRoom.guest && activeRoom.guest.readyState === WebSocket.OPEN) {
-      activeRoom.guest.close();
+    if (activeGame.player2?.readyState === WebSocket.OPEN) {
+      activeGame.player2.close();
     }
-    activeRoom = null;
+    activeGame = null;
   }
+  waitingPlayer = null;
   if (cleanupTimer) {
     clearTimeout(cleanupTimer);
     cleanupTimer = null;
@@ -36,32 +33,22 @@ function cleanupRoom() {
 
 // Reset cleanup timer
 function resetCleanupTimer() {
-  if (cleanupTimer) {
-    clearTimeout(cleanupTimer);
-  }
-  cleanupTimer = setTimeout(cleanupRoom, ROOM_TIMEOUT);
+  if (cleanupTimer) clearTimeout(cleanupTimer);
+  cleanupTimer = setTimeout(cleanupGame, GAME_TIMEOUT);
 }
 
 // Send JSON message
 function send(ws, type, data = {}) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type, ...data }));
   }
 }
 
-// Broadcast to both players
-function broadcast(type, data = {}) {
-  if (activeRoom) {
-    send(activeRoom.host, type, data);
-    send(activeRoom.guest, type, data);
-  }
-}
-
-// Get opponent WebSocket
+// Get opponent
 function getOpponent(ws) {
-  if (!activeRoom) return null;
-  if (activeRoom.host === ws) return activeRoom.guest;
-  if (activeRoom.guest === ws) return activeRoom.host;
+  if (!activeGame) return null;
+  if (activeGame.player1 === ws) return activeGame.player2;
+  if (activeGame.player2 === ws) return activeGame.player1;
   return null;
 }
 
@@ -71,96 +58,54 @@ function handleMessage(ws, message) {
   try {
     msg = JSON.parse(message);
   } catch (e) {
-    send(ws, 'error', { message: 'Invalid JSON' });
     return;
   }
 
   resetCleanupTimer();
 
   switch (msg.type) {
-    case 'create': {
-      // Clean up any existing room first
-      if (activeRoom) {
-        // Notify existing players
-        broadcast('roomClosed', { reason: 'New room created' });
-        cleanupRoom();
-      }
-
-      const code = generateRoomCode();
-      activeRoom = {
-        code,
-        gameType: msg.gameType || 'unknown',
-        host: ws,
-        guest: null,
-        state: null,
-        createdAt: Date.now()
-      };
-      ws.roomRole = 'host';
-      ws.roomCode = code;
-
-      send(ws, 'created', { roomCode: code, role: 'host' });
-      resetCleanupTimer();
-      break;
-    }
-
     case 'join': {
-      const code = msg.roomCode;
-
-      if (!activeRoom) {
-        send(ws, 'error', { message: 'No active room found' });
+      // If there's an active game, reject
+      if (activeGame && activeGame.player1 && activeGame.player2) {
+        send(ws, 'error', { message: 'Game in progress' });
         return;
       }
 
-      if (activeRoom.code !== code) {
-        send(ws, 'error', { message: 'Invalid room code' });
-        return;
+      // If someone is waiting, match them
+      if (waitingPlayer && waitingPlayer.readyState === WebSocket.OPEN) {
+        activeGame = {
+          player1: waitingPlayer,
+          player2: ws,
+          gameType: msg.gameType || 'unknown'
+        };
+        waitingPlayer.playerNum = 1;
+        ws.playerNum = 2;
+        waitingPlayer = null;
+
+        // Notify both players
+        send(activeGame.player1, 'connected', { playerNum: 1 });
+        send(activeGame.player2, 'connected', { playerNum: 2 });
+      } else {
+        // First player - wait for opponent
+        waitingPlayer = ws;
+        ws.gameType = msg.gameType;
+        send(ws, 'waiting', {});
       }
-
-      if (activeRoom.guest) {
-        send(ws, 'error', { message: 'Room is full' });
-        return;
-      }
-
-      activeRoom.guest = ws;
-      ws.roomRole = 'guest';
-      ws.roomCode = code;
-
-      // Notify both players
-      send(ws, 'joined', { roomCode: code, role: 'guest', gameType: activeRoom.gameType });
-      send(activeRoom.host, 'guestJoined', { gameType: activeRoom.gameType });
-
-      // Game is ready to start
-      broadcast('gameReady', { gameType: activeRoom.gameType });
       break;
     }
 
     case 'move': {
-      // Forward move to opponent
       const opponent = getOpponent(ws);
       if (opponent) {
-        send(opponent, 'move', { data: msg.data, from: ws.roomRole });
+        send(opponent, 'move', { data: msg.data, from: ws.playerNum });
       }
       break;
     }
 
     case 'state': {
-      // Sync full game state to opponent
       const opponent = getOpponent(ws);
       if (opponent) {
-        send(opponent, 'state', { data: msg.data, from: ws.roomRole });
-      }
-      // Also store in room for reconnection
-      if (activeRoom) {
-        activeRoom.state = msg.data;
-      }
-      break;
-    }
-
-    case 'chat': {
-      // Simple chat message
-      const opponent = getOpponent(ws);
-      if (opponent) {
-        send(opponent, 'chat', { message: msg.message, from: ws.roomRole });
+        send(opponent, 'state', { data: msg.data, from: ws.playerNum });
       }
       break;
     }
@@ -174,33 +119,28 @@ function handleMessage(ws, message) {
       send(ws, 'pong');
       break;
     }
-
-    default:
-      send(ws, 'error', { message: 'Unknown message type' });
   }
 }
 
 // Handle disconnect
 function handleDisconnect(ws) {
-  if (!activeRoom) return;
+  // If waiting player disconnects
+  if (waitingPlayer === ws) {
+    waitingPlayer = null;
+    return;
+  }
+
+  if (!activeGame) return;
 
   const opponent = getOpponent(ws);
 
-  if (activeRoom.host === ws) {
-    activeRoom.host = null;
-  } else if (activeRoom.guest === ws) {
-    activeRoom.guest = null;
-  }
-
   // Notify opponent
   if (opponent) {
-    send(opponent, 'opponentLeft', { reason: 'Opponent disconnected' });
+    send(opponent, 'opponentLeft', {});
   }
 
-  // Clean up if both disconnected
-  if (!activeRoom.host && !activeRoom.guest) {
-    cleanupRoom();
-  }
+  // Clean up game
+  activeGame = null;
 }
 
 // Initialize WebSocket server
@@ -208,7 +148,7 @@ function initWebSocket(server) {
   const wss = new WebSocket.Server({
     server,
     path: '/ws',
-    maxPayload: 16384 // 16KB max message size
+    maxPayload: 16384
   });
 
   // Ping/pong for connection health
@@ -221,11 +161,11 @@ function initWebSocket(server) {
       ws.isAlive = false;
       ws.ping();
     });
-  }, PING_INTERVAL);
+  }, 30000);
 
   wss.on('close', () => {
     clearInterval(pingInterval);
-    cleanupRoom();
+    cleanupGame();
   });
 
   wss.on('connection', (ws) => {
@@ -243,8 +183,7 @@ function initWebSocket(server) {
       handleDisconnect(ws);
     });
 
-    ws.on('error', (err) => {
-      console.error('WebSocket error:', err.message);
+    ws.on('error', () => {
       handleDisconnect(ws);
     });
   });

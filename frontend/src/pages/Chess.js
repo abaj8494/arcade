@@ -410,7 +410,7 @@ const Chess = () => {
     if (state.gameOver !== undefined) setGameOver(state.gameOver);
   }, []);
 
-  const { connectionState, roomCode, role, error, createRoom, joinRoom, sendMove, sendState, disconnect } =
+  const { connectionState, playerNum, error, connect, disconnect, sendMove, sendState } =
     useWirelessGame('chess', handleWirelessMove, handleWirelessState);
 
   // Update wirelessMoveRef with the actual move handler
@@ -421,13 +421,13 @@ const Chess = () => {
     };
   }, [makeMove]);
 
-  // Handle wireless connection
+  // Handle wireless connection - player 1 is white, player 2 is black
   useEffect(() => {
-    if (connectionState === 'connected') {
-      setShowWirelessModal(false);
+    if (connectionState === 'connected' && playerNum) {
+      setMyColour(playerNum === 1 ? 'white' : 'black');
       setGameMode('2player');
-      if (!myColour) {
-        setMyColour('white');
+      // Player 1 initialises the game
+      if (playerNum === 1) {
         resetGame();
         sendState({
           board: initialBoard(),
@@ -439,16 +439,10 @@ const Chess = () => {
         });
       }
     }
-  }, [connectionState, myColour, sendState]);
+  }, [connectionState, playerNum, sendState]);
 
-  const handleCreateRoom = () => {
-    setMyColour('white');
-    createRoom();
-  };
-
-  const handleJoinRoom = (code) => {
-    setMyColour('black');
-    joinRoom(code);
+  const handleConnect = () => {
+    connect();
   };
 
   const handleDisconnect = () => {
@@ -866,11 +860,9 @@ const Chess = () => {
         isOpen={showWirelessModal}
         onClose={() => setShowWirelessModal(false)}
         connectionState={connectionState}
-        roomCode={roomCode}
-        role={role}
+        playerNum={playerNum}
         error={error}
-        onCreateRoom={handleCreateRoom}
-        onJoinRoom={handleJoinRoom}
+        onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         gameName="Chess"
       />

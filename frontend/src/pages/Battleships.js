@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
@@ -180,8 +180,8 @@ const Battleships = () => {
       if (gamePhase === 'waiting') {
         // Both ready - determine who goes first (host goes first)
         setGamePhase('battle');
-        setIsMyTurn(wireless.isHost);
-        setMessage(wireless.isHost ? 'Your turn - attack!' : "Opponent's turn...");
+        setIsMyTurn(wireless.isPlayer1);
+        setMessage(wireless.isPlayer1 ? 'Your turn - attack!' : "Opponent's turn...");
       }
     } else if (data.type === 'gameOver') {
       setWinner(data.winner === 'me' ? 'opponent' : 'me');
@@ -194,21 +194,22 @@ const Battleships = () => {
     // Could be used for reconnection
   }, []);
 
-  // Handle game ready
-  const handleGameReady = useCallback((role) => {
-    setMessage('Connected! Place your ships.');
-  }, []);
-
   // Wireless hook
   const wireless = useWirelessGame(
     'battleships',
     handleOpponentMove,
-    handleStateSync,
-    handleGameReady
+    handleStateSync
   );
 
   // Keep ref updated
   wirelessRef.current = wireless;
+
+  // Handle connection - set message when connected
+  useEffect(() => {
+    if (wireless.isConnected) {
+      setMessage('Connected! Place your ships.');
+    }
+  }, [wireless.isConnected]);
 
   // Check if a ship is sunk
   const checkShipSunk = (grid, hitRow, hitCol, currentHits) => {
@@ -302,8 +303,8 @@ const Battleships = () => {
 
       if (opponentReady) {
         setGamePhase('battle');
-        setIsMyTurn(wireless.isHost);
-        setMessage(wireless.isHost ? 'Your turn - attack!' : "Opponent's turn...");
+        setIsMyTurn(wireless.isPlayer1);
+        setMessage(wireless.isPlayer1 ? 'Your turn - attack!' : "Opponent's turn...");
       }
     } else {
       setMessage('Connect to an opponent first!');
@@ -414,7 +415,7 @@ const Battleships = () => {
       {/* Connection status */}
       {wireless.isConnected && (
         <div className="mb-2 px-3 py-1 rounded-full bg-green-600 text-sm">
-          Connected as {wireless.isHost ? 'Player 1' : 'Player 2'}
+          Connected as Player {wireless.playerNum}
         </div>
       )}
 
@@ -577,11 +578,9 @@ const Battleships = () => {
         isOpen={showWirelessModal}
         onClose={() => setShowWirelessModal(false)}
         connectionState={wireless.connectionState}
-        roomCode={wireless.roomCode}
-        role={wireless.role}
+        playerNum={wireless.playerNum}
         error={wireless.error}
-        onCreateRoom={wireless.createRoom}
-        onJoinRoom={wireless.joinRoom}
+        onConnect={wireless.connect}
         onDisconnect={wireless.disconnect}
         gameName="Battleships"
       />

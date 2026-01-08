@@ -310,23 +310,17 @@ const UltimateTicTacToe = () => {
     }
   }, []);
 
-  // Handle wireless game ready
-  const handleWirelessReady = useCallback(() => {
-    // Will be called when both players are connected
-  }, []);
-
   // Wireless hook
   const wireless = useWirelessGame(
     'ultimate-tic-tac-toe',
     handleWirelessMove,
-    null,
-    handleWirelessReady
+    null
   );
 
-  // Set symbol when wireless connects
+  // Set symbol when wireless connects - player 1 is X, player 2 is O
   useEffect(() => {
-    if (wireless.isConnected && gameMode !== 'wireless') {
-      setMySymbol(wireless.isHost ? 'X' : 'O');
+    if (wireless.isConnected && wireless.playerNum && gameMode !== 'wireless') {
+      setMySymbol(wireless.isPlayer1 ? 'X' : 'O');
       setGameMode('wireless');
       // Reset game for wireless play
       setBoards(Array(9).fill(null).map(() => Array(9).fill(null)));
@@ -337,7 +331,7 @@ const UltimateTicTacToe = () => {
       setWinningBoards([]);
       setLastMove(null);
     }
-  }, [wireless.isConnected, wireless.isHost, gameMode]);
+  }, [wireless.isConnected, wireless.playerNum, wireless.isPlayer1, gameMode]);
 
   // AI turn effect
   useEffect(() => {
@@ -486,7 +480,7 @@ const UltimateTicTacToe = () => {
       {/* Wireless status */}
       {wireless.isConnected && (
         <div className="mb-2 px-3 py-1 rounded-full bg-green-600 text-sm">
-          Wireless: You are {mySymbol} ({wireless.isHost ? 'Host' : 'Guest'})
+          Wireless: You are {mySymbol} (Player {wireless.playerNum})
         </div>
       )}
 
@@ -654,11 +648,9 @@ const UltimateTicTacToe = () => {
         isOpen={showWirelessModal}
         onClose={() => setShowWirelessModal(false)}
         connectionState={wireless.connectionState}
-        roomCode={wireless.roomCode}
-        role={wireless.role}
+        playerNum={wireless.playerNum}
         error={wireless.error}
-        onCreateRoom={wireless.createRoom}
-        onJoinRoom={wireless.joinRoom}
+        onConnect={wireless.connect}
         onDisconnect={wireless.disconnect}
         gameName="Ultimate Tic Tac Toe"
       />

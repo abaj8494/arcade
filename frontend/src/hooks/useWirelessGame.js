@@ -4,8 +4,6 @@ const WS_URL = process.env.NODE_ENV === 'production'
   ? `wss://${window.location.host}/ws`
   : 'ws://localhost:5000/ws';
 
-const RECONNECT_DELAY = 3000;
-
 export const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
@@ -14,25 +12,19 @@ export const ConnectionState = {
   ERROR: 'error'
 };
 
-export function useWirelessGame(gameType, onMove, onState, onGameReady) {
+export function useWirelessGame(gameType, onMove, onState) {
   const [connectionState, setConnectionState] = useState(ConnectionState.DISCONNECTED);
-  const [roomCode, setRoomCode] = useState(null);
-  const [role, setRole] = useState(null); // 'host' or 'guest'
+  const [playerNum, setPlayerNum] = useState(null);
   const [error, setError] = useState(null);
 
   const wsRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
 
-  // Clean up WebSocket
+  // Clean up
   const cleanup = useCallback(() => {
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
     }
     if (wsRef.current) {
       wsRef.current.close();
@@ -40,16 +32,16 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
     }
   }, []);
 
-  // Send message helper
+  // Send message
   const send = useCallback((type, data = {}) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type, ...data }));
       return true;
     }
     return false;
   }, []);
 
-  // Connect to WebSocket
+  // Connect and join
   const connect = useCallback(() => {
     cleanup();
     setConnectionState(ConnectionState.CONNECTING);
@@ -60,10 +52,13 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // Start ping interval to keep connection alive
+        // Start ping interval
         pingIntervalRef.current = setInterval(() => {
           send('ping');
         }, 25000);
+
+        // Auto-join
+        ws.send(JSON.stringify({ type: 'join', gameType }));
       };
 
       ws.onmessage = (event) => {
@@ -71,24 +66,13 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
           const msg = JSON.parse(event.data);
 
           switch (msg.type) {
-            case 'created':
-              setRoomCode(msg.roomCode);
-              setRole(msg.role);
+            case 'waiting':
               setConnectionState(ConnectionState.WAITING);
               break;
 
-            case 'joined':
-              setRoomCode(msg.roomCode);
-              setRole(msg.role);
+            case 'connected':
+              setPlayerNum(msg.playerNum);
               setConnectionState(ConnectionState.CONNECTED);
-              break;
-
-            case 'guestJoined':
-              setConnectionState(ConnectionState.CONNECTED);
-              break;
-
-            case 'gameReady':
-              if (onGameReady) onGameReady(role);
               break;
 
             case 'move':
@@ -100,26 +84,17 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
               break;
 
             case 'opponentLeft':
-              setConnectionState(ConnectionState.WAITING);
-              setError('Opponent disconnected');
-              break;
-
-            case 'roomClosed':
               setConnectionState(ConnectionState.DISCONNECTED);
-              setRoomCode(null);
-              setRole(null);
-              setError(msg.reason || 'Room closed');
+              setPlayerNum(null);
+              cleanup();
               break;
 
             case 'error':
               setError(msg.message);
-              if (connectionState === ConnectionState.CONNECTING) {
-                setConnectionState(ConnectionState.ERROR);
-              }
+              setConnectionState(ConnectionState.ERROR);
               break;
 
             case 'pong':
-              // Connection is alive
               break;
 
             default:
@@ -132,9 +107,9 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
 
       ws.onclose = () => {
         if (connectionState !== ConnectionState.DISCONNECTED) {
-          setConnectionState(ConnectionState.ERROR);
-          setError('Connection lost');
+          setConnectionState(ConnectionState.DISCONNECTED);
         }
+        setPlayerNum(null);
       };
 
       ws.onerror = () => {
@@ -146,79 +121,44 @@ export function useWirelessGame(gameType, onMove, onState, onGameReady) {
       setConnectionState(ConnectionState.ERROR);
       setError('Failed to connect');
     }
-  }, [cleanup, send, connectionState, role, onMove, onState, onGameReady]);
-
-  // Create a new room
-  const createRoom = useCallback(() => {
-    connect();
-    // Wait for connection then send create
-    const checkAndCreate = setInterval(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        clearInterval(checkAndCreate);
-        send('create', { gameType });
-      }
-    }, 100);
-
-    // Timeout after 5 seconds
-    setTimeout(() => clearInterval(checkAndCreate), 5000);
-  }, [connect, send, gameType]);
-
-  // Join an existing room
-  const joinRoom = useCallback((code) => {
-    connect();
-    // Wait for connection then send join
-    const checkAndJoin = setInterval(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        clearInterval(checkAndJoin);
-        send('join', { roomCode: code });
-      }
-    }, 100);
-
-    // Timeout after 5 seconds
-    setTimeout(() => clearInterval(checkAndJoin), 5000);
-  }, [connect, send]);
-
-  // Send a move to opponent
-  const sendMove = useCallback((moveData) => {
-    return send('move', { data: moveData });
-  }, [send]);
-
-  // Send full game state to opponent
-  const sendState = useCallback((stateData) => {
-    return send('state', { data: stateData });
-  }, [send]);
+  }, [cleanup, send, gameType, onMove, onState, connectionState]);
 
   // Disconnect
   const disconnect = useCallback(() => {
     send('leave');
     cleanup();
     setConnectionState(ConnectionState.DISCONNECTED);
-    setRoomCode(null);
-    setRole(null);
+    setPlayerNum(null);
     setError(null);
   }, [send, cleanup]);
 
+  // Send move
+  const sendMove = useCallback((moveData) => {
+    return send('move', { data: moveData });
+  }, [send]);
+
+  // Send state
+  const sendState = useCallback((stateData) => {
+    return send('state', { data: stateData });
+  }, [send]);
+
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      cleanup();
-    };
+    return () => cleanup();
   }, [cleanup]);
 
   return {
     connectionState,
-    roomCode,
-    role,
+    playerNum,
     error,
-    isHost: role === 'host',
-    isGuest: role === 'guest',
+    isPlayer1: playerNum === 1,
+    isPlayer2: playerNum === 2,
     isConnected: connectionState === ConnectionState.CONNECTED,
     isWaiting: connectionState === ConnectionState.WAITING,
-    createRoom,
-    joinRoom,
+    connect,
+    disconnect,
     sendMove,
-    sendState,
-    disconnect
+    sendState
   };
 }
 
