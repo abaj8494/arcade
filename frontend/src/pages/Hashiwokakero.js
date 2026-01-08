@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
 
 const CELL_SIZE = 50;
 
@@ -94,6 +95,7 @@ const Hashiwokakero = () => {
   const [solving, setSolving] = useState(false);
   const [error, setError] = useState(null);
   const solveIntervalRef = useRef(null);
+  const { showHelp, toggleHelp } = useHelpVisibility();
 
   // Initialize puzzle
   const initPuzzle = useCallback((diff) => {
@@ -451,83 +453,104 @@ const Hashiwokakero = () => {
     return neighbours;
   }, []);
 
-  // Solve puzzle using backtracking
+  // Solve puzzle using robust constraint propagation + backtracking
   const solvePuzzle = useCallback(() => {
     setSolving(true);
     setBridges([]);
     setSelectedIsland(null);
 
     const islandsList = islands.map(island => ({ ...island }));
+    const n = islandsList.length;
 
-    // Build adjacency list
+    // Build adjacency list with all possible edges
     const adjacency = new Map();
-    for (const island of islandsList) {
-      adjacency.set(island.id, findAllNeighbours(island, islandsList));
-    }
+    const allEdges = [];
 
-    // Generate all potential bridge pairs (avoid duplicates)
-    const potentialBridges = [];
-    const seen = new Set();
     for (const island of islandsList) {
-      const neighbours = adjacency.get(island.id);
+      const neighbours = findAllNeighbours(island, islandsList);
+      adjacency.set(island.id, neighbours);
+
+      // Add edges (only once per pair)
       for (const neighbour of neighbours) {
-        const key = [Math.min(island.id, neighbour.id), Math.max(island.id, neighbour.id)].join('-');
-        if (!seen.has(key)) {
-          seen.add(key);
-          potentialBridges.push({ from: island, to: neighbour });
+        if (island.id < neighbour.id) {
+          allEdges.push({
+            from: island,
+            to: neighbour,
+            key: `${island.id}-${neighbour.id}`
+          });
         }
       }
     }
 
-    // Check if a bridge crosses existing bridges
-    const checkCross = (newBridge, existingBridges) => {
-      const isHorizontal = newBridge.from.y === newBridge.to.y;
+    // Check if two edges cross
+    const edgesCross = (e1From, e1To, e2From, e2To) => {
+      const e1Horiz = e1From.y === e1To.y;
+      const e2Horiz = e2From.y === e2To.y;
 
-      for (const bridge of existingBridges) {
-        if (bridge.count === 0) continue;
-        const bridgeIsHorizontal = bridge.from.y === bridge.to.y;
-        if (isHorizontal === bridgeIsHorizontal) continue;
+      if (e1Horiz === e2Horiz) return false; // Parallel edges don't cross
 
-        if (isHorizontal) {
-          const minX = Math.min(newBridge.from.x, newBridge.to.x);
-          const maxX = Math.max(newBridge.from.x, newBridge.to.x);
-          const minY = Math.min(bridge.from.y, bridge.to.y);
-          const maxY = Math.max(bridge.from.y, bridge.to.y);
+      const [horiz, vert] = e1Horiz ? [{ from: e1From, to: e1To }, { from: e2From, to: e2To }]
+                                    : [{ from: e2From, to: e2To }, { from: e1From, to: e1To }];
 
-          if (bridge.from.x > minX && bridge.from.x < maxX &&
-              newBridge.from.y > minY && newBridge.from.y < maxY) {
-            return true;
-          }
-        } else {
-          const minY = Math.min(newBridge.from.y, newBridge.to.y);
-          const maxY = Math.max(newBridge.from.y, newBridge.to.y);
-          const minX = Math.min(bridge.from.x, bridge.to.x);
-          const maxX = Math.max(bridge.from.x, bridge.to.x);
+      const hMinX = Math.min(horiz.from.x, horiz.to.x);
+      const hMaxX = Math.max(horiz.from.x, horiz.to.x);
+      const hY = horiz.from.y;
 
-          if (bridge.from.y > minY && bridge.from.y < maxY &&
-              newBridge.from.x > minX && newBridge.from.x < maxX) {
-            return true;
-          }
-        }
-      }
-      return false;
+      const vMinY = Math.min(vert.from.y, vert.to.y);
+      const vMaxY = Math.max(vert.from.y, vert.to.y);
+      const vX = vert.from.x;
+
+      return vX > hMinX && vX < hMaxX && hY > vMinY && hY < vMaxY;
     };
 
-    // Count bridges for an island in current state
-    const countIslandBridges = (islandId, bridgeState) => {
-      let count = 0;
-      for (const b of bridgeState) {
-        if (b.from.id === islandId || b.to.id === islandId) {
-          count += b.count;
+    // State: for each edge, track current count (0, 1, or 2)
+    // We'll use a simple array indexed by edge index
+    const edgeIndex = new Map();
+    allEdges.forEach((e, i) => edgeIndex.set(e.key, i));
+
+    // Get edges for an island
+    const getIslandEdges = (islandId) => {
+      return allEdges.map((e, i) => ({ edge: e, idx: i }))
+        .filter(({ edge }) => edge.from.id === islandId || edge.to.id === islandId);
+    };
+
+    // Count bridges for an island given edge counts
+    const countIslandBridges = (islandId, edgeCounts) => {
+      return getIslandEdges(islandId).reduce((sum, { idx }) => sum + edgeCounts[idx], 0);
+    };
+
+    // Check if state is valid (no constraint violations)
+    const isValid = (edgeCounts) => {
+      // Check island constraints
+      for (const island of islandsList) {
+        const count = countIslandBridges(island.id, edgeCounts);
+        if (count > island.bridges) return false;
+      }
+
+      // Check crossing constraints
+      for (let i = 0; i < allEdges.length; i++) {
+        if (edgeCounts[i] === 0) continue;
+        for (let j = i + 1; j < allEdges.length; j++) {
+          if (edgeCounts[j] === 0) continue;
+          if (edgesCross(allEdges[i].from, allEdges[i].to, allEdges[j].from, allEdges[j].to)) {
+            return false;
+          }
         }
       }
-      return count;
+
+      return true;
+    };
+
+    // Check if all islands are satisfied
+    const allSatisfied = (edgeCounts) => {
+      return islandsList.every(island =>
+        countIslandBridges(island.id, edgeCounts) === island.bridges
+      );
     };
 
     // Check connectivity
-    const isConnected = (bridgeState) => {
-      const activeBridges = bridgeState.filter(b => b.count > 0);
-      if (activeBridges.length === 0) return false;
+    const isConnected = (edgeCounts) => {
+      if (n <= 1) return true;
 
       const visited = new Set();
       const queue = [islandsList[0].id];
@@ -535,10 +558,12 @@ const Hashiwokakero = () => {
 
       while (queue.length > 0) {
         const current = queue.shift();
-        for (const bridge of activeBridges) {
+        for (let i = 0; i < allEdges.length; i++) {
+          if (edgeCounts[i] === 0) continue;
+          const edge = allEdges[i];
           let neighbour = null;
-          if (bridge.from.id === current) neighbour = bridge.to.id;
-          else if (bridge.to.id === current) neighbour = bridge.from.id;
+          if (edge.from.id === current) neighbour = edge.to.id;
+          else if (edge.to.id === current) neighbour = edge.from.id;
 
           if (neighbour !== null && !visited.has(neighbour)) {
             visited.add(neighbour);
@@ -547,84 +572,196 @@ const Hashiwokakero = () => {
         }
       }
 
-      return visited.size === islandsList.length;
+      return visited.size === n;
+    };
+
+    // Constraint propagation: deduce forced values
+    const propagate = (edgeCounts, maxBridges) => {
+      const counts = [...edgeCounts];
+      const maxB = [...maxBridges];
+      let changed = true;
+
+      while (changed) {
+        changed = false;
+
+        for (const island of islandsList) {
+          const edges = getIslandEdges(island.id);
+          const currentCount = edges.reduce((sum, { idx }) => sum + counts[idx], 0);
+          const needed = island.bridges - currentCount;
+
+          if (needed < 0) return null; // Over-satisfied
+          if (needed === 0) {
+            // Island satisfied - can't add more bridges
+            for (const { idx } of edges) {
+              if (maxB[idx] > counts[idx]) {
+                maxB[idx] = counts[idx];
+                changed = true;
+              }
+            }
+            continue;
+          }
+
+          // Calculate available capacity
+          let available = 0;
+          const availableEdges = [];
+
+          for (const { edge, idx } of edges) {
+            const canAdd = maxB[idx] - counts[idx];
+            if (canAdd > 0) {
+              // Check if adding would cross existing bridges
+              let blocked = false;
+              for (let j = 0; j < allEdges.length; j++) {
+                if (j === idx || counts[j] === 0) continue;
+                if (edgesCross(edge.from, edge.to, allEdges[j].from, allEdges[j].to)) {
+                  blocked = true;
+                  break;
+                }
+              }
+
+              if (!blocked) {
+                // Check neighbour capacity
+                const neighbourId = edge.from.id === island.id ? edge.to.id : edge.from.id;
+                const neighbour = islandsList.find(isl => isl.id === neighbourId);
+                const neighbourCount = countIslandBridges(neighbourId, counts);
+                const neighbourCanTake = Math.max(0, neighbour.bridges - neighbourCount);
+
+                const actualCanAdd = Math.min(canAdd, neighbourCanTake);
+                if (actualCanAdd > 0) {
+                  available += actualCanAdd;
+                  availableEdges.push({ edge, idx, canAdd: actualCanAdd });
+                }
+              } else {
+                // This edge is blocked by crossing
+                if (maxB[idx] > counts[idx]) {
+                  maxB[idx] = counts[idx];
+                  changed = true;
+                }
+              }
+            }
+          }
+
+          if (available < needed) return null; // Can't satisfy
+
+          // If total available equals needed, all available edges must be used fully
+          if (available === needed) {
+            for (const { idx, canAdd } of availableEdges) {
+              if (counts[idx] < counts[idx] + canAdd) {
+                counts[idx] += canAdd;
+                changed = true;
+              }
+            }
+          }
+
+          // If island needs 2n-1 or more bridges with n neighbours, must use all
+          if (availableEdges.length > 0 && needed >= 2 * availableEdges.length - 1) {
+            for (const { idx } of availableEdges) {
+              if (counts[idx] === 0) {
+                counts[idx] = 1;
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+
+      return { counts, maxB };
     };
 
     // Backtracking solver
-    const solve = (bridgeIdx, bridgeState) => {
-      // Check if all islands satisfied
-      const allSatisfied = islandsList.every(island =>
-        countIslandBridges(island.id, bridgeState) === island.bridges
-      );
+    const solve = (edgeCounts, maxBridges, depth = 0) => {
+      // Apply constraint propagation
+      const result = propagate(edgeCounts, maxBridges);
+      if (!result) return null;
 
-      if (allSatisfied) {
-        // Check connectivity
-        if (isConnected(bridgeState)) {
-          return bridgeState.filter(b => b.count > 0);
-        }
-        return null;
+      const { counts, maxB } = result;
+
+      // Check if solved
+      if (allSatisfied(counts)) {
+        return isConnected(counts) ? counts : null;
       }
 
-      if (bridgeIdx >= potentialBridges.length) {
-        return null;
+      // Find an undetermined edge (where we have a choice)
+      let bestEdgeIdx = -1;
+      let minChoices = Infinity;
+
+      for (let i = 0; i < allEdges.length; i++) {
+        if (counts[i] < maxB[i]) {
+          // This edge has room to grow
+          const choices = maxB[i] - counts[i] + 1;
+          if (choices < minChoices) {
+            minChoices = choices;
+            bestEdgeIdx = i;
+          }
+        }
       }
 
-      const { from, to } = potentialBridges[bridgeIdx];
-      const fromCount = countIslandBridges(from.id, bridgeState);
-      const toCount = countIslandBridges(to.id, bridgeState);
-      const fromRemaining = from.bridges - fromCount;
-      const toRemaining = to.bridges - toCount;
+      if (bestEdgeIdx === -1) return null; // No choices left but not solved
 
-      // Try 0, 1, or 2 bridges
-      const maxBridges = Math.min(2, fromRemaining, toRemaining);
+      // Try different values for this edge
+      const edge = allEdges[bestEdgeIdx];
+      const currentVal = counts[bestEdgeIdx];
+      const maxVal = maxB[bestEdgeIdx];
 
-      for (let count = maxBridges; count >= 0; count--) {
-        const newBridge = { from, to, count };
+      // Try values from high to low (prefer more bridges)
+      for (let val = maxVal; val >= currentVal; val--) {
+        const newCounts = [...counts];
+        const newMaxB = [...maxB];
 
-        // Check crossing
-        if (count > 0 && checkCross(newBridge, bridgeState)) {
-          continue;
+        // Fix this edge to exactly val bridges
+        newCounts[bestEdgeIdx] = val;
+        newMaxB[bestEdgeIdx] = val;
+
+        if (isValid(newCounts)) {
+          const solution = solve(newCounts, newMaxB, depth + 1);
+          if (solution) return solution;
         }
-
-        const newState = [...bridgeState, newBridge];
-        const result = solve(bridgeIdx + 1, newState);
-        if (result) return result;
       }
 
       return null;
     };
 
-    // Run solver with timeout
+    // Run solver
     setTimeout(() => {
       try {
-        const solution = solve(0, []);
+        const initialCounts = new Array(allEdges.length).fill(0);
+        const initialMax = new Array(allEdges.length).fill(2);
+
+        const solution = solve(initialCounts, initialMax);
 
         if (solution) {
+          const solutionBridges = [];
+          for (let i = 0; i < allEdges.length; i++) {
+            if (solution[i] > 0) {
+              solutionBridges.push({
+                from: allEdges[i].from,
+                to: allEdges[i].to,
+                count: solution[i]
+              });
+            }
+          }
+
           // Animate the solution
           let idx = 0;
           solveIntervalRef.current = setInterval(() => {
-            if (idx >= solution.length) {
+            if (idx >= solutionBridges.length) {
               clearInterval(solveIntervalRef.current);
               setSolving(false);
               return;
             }
-            // Ensure bridge has valid structure before adding
-            const bridge = solution[idx];
-            if (bridge && bridge.from && bridge.to && typeof bridge.count === 'number') {
-              setBridges(prev => [...prev, bridge]);
-            }
+            const bridge = solutionBridges[idx];
+            setBridges(prev => [...prev, bridge]);
             idx++;
-          }, 200);
+          }, 150);
         } else {
           setSolving(false);
-          alert('No solution found!');
+          alert('No solution found! The puzzle may be invalid.');
         }
       } catch (err) {
         console.error('Solver error:', err);
         setSolving(false);
         setError('An error occurred while solving. Please try again.');
       }
-    }, 100);
+    }, 50);
   }, [islands, findAllNeighbours]);
 
   // Cleanup on unmount
@@ -769,7 +906,10 @@ const Hashiwokakero = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-4">Hashiwokakero</h1>
+      <div className="flex items-center gap-4 mb-4">
+        <h1 className="text-3xl font-bold">Hashiwokakero</h1>
+        <HelpButton onClick={toggleHelp} isActive={showHelp} />
+      </div>
       <p className="text-gray-400 mb-4">Connect islands with bridges</p>
 
       {/* Difficulty Selection */}
@@ -855,16 +995,18 @@ const Hashiwokakero = () => {
       </div>
 
       {/* Instructions */}
-      <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
-        <h3 className="text-white font-semibold mb-2">How to Play:</h3>
-        <ul className="list-disc list-inside space-y-1">
-          <li>Click an island to select it, then click a neighbour to build a bridge</li>
-          <li>Right-click a bridge to remove it</li>
-          <li>Each island needs exactly the number of bridges shown</li>
-          <li>Max 2 bridges between any two islands</li>
-          <li>Bridges cannot cross each other</li>
-        </ul>
-      </div>
+      {showHelp && (
+        <div className="mt-4 p-4 bg-surface rounded-lg max-w-md text-gray-400 text-sm">
+          <h3 className="text-white font-semibold mb-2">How to Play:</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Click an island to select it, then click a neighbour to build a bridge</li>
+            <li>Right-click a bridge to remove it</li>
+            <li>Each island needs exactly the number of bridges shown</li>
+            <li>Max 2 bridges between any two islands</li>
+            <li>Bridges cannot cross each other</li>
+          </ul>
+        </div>
+      )}
 
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games
