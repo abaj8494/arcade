@@ -410,7 +410,7 @@ const Chess = () => {
     if (state.gameOver !== undefined) setGameOver(state.gameOver);
   }, []);
 
-  const { status: wirelessStatus, roomCode, createRoom, joinRoom, sendMove, sendState, disconnect } =
+  const { connectionState, roomCode, role, error, createRoom, joinRoom, sendMove, sendState, disconnect } =
     useWirelessGame('chess', handleWirelessMove, handleWirelessState);
 
   // Update wirelessMoveRef with the actual move handler
@@ -423,7 +423,7 @@ const Chess = () => {
 
   // Handle wireless connection
   useEffect(() => {
-    if (wirelessStatus === 'connected') {
+    if (connectionState === 'connected') {
       setShowWirelessModal(false);
       setGameMode('2player');
       if (!myColour) {
@@ -439,7 +439,7 @@ const Chess = () => {
         });
       }
     }
-  }, [wirelessStatus, myColour, sendState]);
+  }, [connectionState, myColour, sendState]);
 
   const handleCreateRoom = () => {
     setMyColour('white');
@@ -463,7 +463,7 @@ const Chess = () => {
     if (gameMode === 'ai' && currentPlayer === 'black') return;
 
     // Check if it's our turn in wireless mode
-    if (wirelessStatus === 'connected' && myColour) {
+    if (connectionState === 'connected' && myColour) {
       const isMyTurn = (myColour === 'white' && currentPlayer === 'white') ||
                        (myColour === 'black' && currentPlayer === 'black');
       if (!isMyTurn) return;
@@ -482,7 +482,7 @@ const Chess = () => {
       if (move) {
         const moveSuccess = makeMove(fromRow, fromCol, row, col, move[2]);
         // Send move over wireless
-        if (moveSuccess && wirelessStatus === 'connected') {
+        if (moveSuccess && connectionState === 'connected') {
           sendMove({ fromRow, fromCol, toRow: row, toCol: col, special: move[2] });
         }
         return;
@@ -509,7 +509,7 @@ const Chess = () => {
 
     setPromotionSquare(null);
     const moveSuccess = makeMove(from[0], from[1], to[0], to[1], null, promotionPiece);
-    if (moveSuccess && wirelessStatus === 'connected') {
+    if (moveSuccess && connectionState === 'connected') {
       sendMove({ fromRow: from[0], fromCol: from[1], toRow: to[0], toCol: to[1], promoteTo: promotionPiece });
     }
   };
@@ -707,7 +707,7 @@ const Chess = () => {
     if (isAiThinking) return 'AI is thinking...';
     const inCheck = isInCheck(board, currentPlayer === 'white');
     const turnText = `${currentPlayer === 'white' ? 'White' : 'Black'}'s turn${inCheck ? ' - Check!' : ''}`;
-    if (wirelessStatus === 'connected' && myColour) {
+    if (connectionState === 'connected' && myColour) {
       const isMyTurn = myColour === currentPlayer;
       return `${turnText} ${isMyTurn ? '(Your turn)' : '(Waiting...)'}`;
     }
@@ -719,14 +719,14 @@ const Chess = () => {
       <div className="flex items-center gap-4 mb-4">
         <h1 className="text-3xl font-bold">Chess</h1>
         <WirelessButton
-          onClick={() => wirelessStatus === 'connected' ? handleDisconnect() : setShowWirelessModal(true)}
-          isConnected={wirelessStatus === 'connected'}
+          onClick={() => connectionState === 'connected' ? handleDisconnect() : setShowWirelessModal(true)}
+          isActive={connectionState === 'connected' || connectionState === 'waiting'}
           disabled={gameMode === 'ai'}
         />
       </div>
 
       {/* Wireless connection status */}
-      {wirelessStatus === 'connected' && (
+      {connectionState === 'connected' && (
         <div className="mb-4 text-green-400 text-sm">
           Connected - Playing as {myColour === 'white' ? 'White' : 'Black'}
         </div>
@@ -736,15 +736,15 @@ const Chess = () => {
       <div className="mb-4 flex gap-4">
         <button
           onClick={() => { setGameMode('2player'); resetGame(); handleDisconnect(); }}
-          className={`btn ${gameMode === '2player' && wirelessStatus !== 'connected' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
-          disabled={wirelessStatus === 'connected'}
+          className={`btn ${gameMode === '2player' && connectionState !== 'connected' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+          disabled={connectionState === 'connected'}
         >
           2 Player
         </button>
         <button
           onClick={() => { setGameMode('ai'); resetGame(); handleDisconnect(); }}
           className={`btn ${gameMode === 'ai' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
-          disabled={wirelessStatus === 'connected'}
+          disabled={connectionState === 'connected'}
         >
           vs AI
         </button>
@@ -865,10 +865,13 @@ const Chess = () => {
       <WirelessModal
         isOpen={showWirelessModal}
         onClose={() => setShowWirelessModal(false)}
+        connectionState={connectionState}
+        roomCode={roomCode}
+        role={role}
+        error={error}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
-        roomCode={roomCode}
-        status={wirelessStatus}
+        onDisconnect={handleDisconnect}
         gameName="Chess"
       />
     </div>

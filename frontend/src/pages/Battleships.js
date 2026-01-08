@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import useWirelessGame, { ConnectionState } from '../hooks/useWirelessGame';
+import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
 
 const GRID_SIZE = 10;
@@ -94,7 +94,6 @@ const Battleships = () => {
   const [myGrid, setMyGrid] = useState(createEmptyGrid);
   const [myHits, setMyHits] = useState(createEmptyGrid); // Hits received
   const [opponentHits, setOpponentHits] = useState(createEmptyGrid); // My attacks on opponent
-  const [opponentGrid, setOpponentGrid] = useState(null); // Revealed at end
 
   // Placement state
   const [placingShipIndex, setPlacingShipIndex] = useState(0);
@@ -111,9 +110,12 @@ const Battleships = () => {
   // Wireless state
   const [showWirelessModal, setShowWirelessModal] = useState(false);
   const [opponentReady, setOpponentReady] = useState(false);
+  const wirelessRef = useRef(null);
 
   // Handle incoming moves from opponent
   const handleOpponentMove = useCallback((data, from) => {
+    const wireless = wirelessRef.current;
+    if (!wireless) return;
     if (data.type === 'attack') {
       const { row, col } = data;
       const hit = myGrid[row][col] !== null;
@@ -204,6 +206,9 @@ const Battleships = () => {
     handleStateSync,
     handleGameReady
   );
+
+  // Keep ref updated
+  wirelessRef.current = wireless;
 
   // Check if a ship is sunk
   const checkShipSunk = (grid, hitRow, hitCol, currentHits) => {
@@ -328,7 +333,6 @@ const Battleships = () => {
     setMyGrid(createEmptyGrid());
     setMyHits(createEmptyGrid());
     setOpponentHits(createEmptyGrid());
-    setOpponentGrid(null);
     setPlacingShipIndex(0);
     setPlacedShips([]);
     setHoverCells([]);

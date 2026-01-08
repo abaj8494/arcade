@@ -132,7 +132,7 @@ const Connect4 = () => {
     if (state.winningCells) setWinningCells(state.winningCells);
   }, []);
 
-  const { status: wirelessStatus, roomCode, createRoom, joinRoom, sendMove, sendState, disconnect } =
+  const { connectionState, roomCode, role, error, createRoom, joinRoom, sendMove, sendState, disconnect } =
     useWirelessGame('connect4', handleWirelessMove, handleWirelessState);
 
   // Update wirelessMoveRef with the actual move handler
@@ -145,7 +145,7 @@ const Connect4 = () => {
 
   // Handle wireless connection
   useEffect(() => {
-    if (wirelessStatus === 'connected') {
+    if (connectionState === 'connected') {
       setShowWirelessModal(false);
       setGameMode('2player');
       if (!myColour) {
@@ -162,7 +162,7 @@ const Connect4 = () => {
         });
       }
     }
-  }, [wirelessStatus, myColour, sendState]);
+  }, [connectionState, myColour, sendState]);
 
   const handleCreateRoom = () => {
     setMyColour('red');
@@ -185,7 +185,7 @@ const Connect4 = () => {
     if (gameMode === 'ai' && currentPlayer === PLAYER_2) return;
 
     // Check if it's our turn in wireless mode
-    if (wirelessStatus === 'connected' && myColour) {
+    if (connectionState === 'connected' && myColour) {
       const isMyTurn = (myColour === 'red' && currentPlayer === PLAYER_1) ||
                        (myColour === 'yellow' && currentPlayer === PLAYER_2);
       if (!isMyTurn) return;
@@ -193,10 +193,10 @@ const Connect4 = () => {
 
     const result = makeMove(col, currentPlayer);
     // Send move over wireless
-    if (result.success && wirelessStatus === 'connected') {
+    if (result.success && connectionState === 'connected') {
       sendMove({ col, player: currentPlayer });
     }
-  }, [winner, isAiThinking, gameMode, currentPlayer, makeMove, wirelessStatus, myColour, sendMove]);
+  }, [winner, isAiThinking, gameMode, currentPlayer, makeMove, connectionState, myColour, sendMove]);
 
   // AI Logic with Minimax
   const evaluateBoard = useCallback((board, player) => {
@@ -415,7 +415,7 @@ const Connect4 = () => {
     if (winner) return `${winner === PLAYER_1 ? 'Red' : 'Yellow'} wins!`;
     if (isAiThinking) return 'AI is thinking...';
     const turnText = `${currentPlayer === PLAYER_1 ? 'Red' : 'Yellow'}'s turn`;
-    if (wirelessStatus === 'connected' && myColour) {
+    if (connectionState === 'connected' && myColour) {
       const isMyTurn = (myColour === 'red' && currentPlayer === PLAYER_1) ||
                        (myColour === 'yellow' && currentPlayer === PLAYER_2);
       return `${turnText} ${isMyTurn ? '(Your turn)' : '(Waiting...)'}`;
@@ -432,14 +432,14 @@ const Connect4 = () => {
       <div className="flex items-center gap-4 mb-4">
         <h1 className="text-3xl font-bold">Connect 4</h1>
         <WirelessButton
-          onClick={() => wirelessStatus === 'connected' ? handleDisconnect() : setShowWirelessModal(true)}
-          isConnected={wirelessStatus === 'connected'}
+          onClick={() => connectionState === 'connected' ? handleDisconnect() : setShowWirelessModal(true)}
+          isActive={connectionState === 'connected' || connectionState === 'waiting'}
           disabled={gameMode === 'ai'}
         />
       </div>
 
       {/* Wireless connection status */}
-      {wirelessStatus === 'connected' && (
+      {connectionState === 'connected' && (
         <div className="mb-4 text-green-400 text-sm">
           Connected - Playing as {myColour === 'red' ? 'Red' : 'Yellow'}
         </div>
@@ -449,15 +449,15 @@ const Connect4 = () => {
       <div className="mb-4 flex gap-4">
         <button
           onClick={() => { setGameMode('2player'); resetGame(); handleDisconnect(); }}
-          className={`btn ${gameMode === '2player' && wirelessStatus !== 'connected' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
-          disabled={wirelessStatus === 'connected'}
+          className={`btn ${gameMode === '2player' && connectionState !== 'connected' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
+          disabled={connectionState === 'connected'}
         >
           2 Player
         </button>
         <button
           onClick={() => { setGameMode('ai'); resetGame(); handleDisconnect(); }}
           className={`btn ${gameMode === 'ai' ? 'btn-primary' : 'bg-gray-600 hover:bg-gray-500'}`}
-          disabled={wirelessStatus === 'connected'}
+          disabled={connectionState === 'connected'}
         >
           vs AI
         </button>
@@ -599,10 +599,13 @@ const Connect4 = () => {
       <WirelessModal
         isOpen={showWirelessModal}
         onClose={() => setShowWirelessModal(false)}
+        connectionState={connectionState}
+        roomCode={roomCode}
+        role={role}
+        error={error}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
-        roomCode={roomCode}
-        status={wirelessStatus}
+        onDisconnect={handleDisconnect}
         gameName="Connect 4"
       />
     </div>
