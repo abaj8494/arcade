@@ -251,40 +251,10 @@ const UltimateTicTacToe = () => {
     return bestMove;
   }, [getValidMoves, applyMove, minimax]);
 
-  // AI turn effect
-  useEffect(() => {
-    if (gameMode !== 'ai' || currentPlayer !== 'O' || gameWinner || isAiThinking) {
-      return;
-    }
-
-    setIsAiThinking(true);
-    aiTimeoutRef.current = setTimeout(() => {
-      const move = getAiMove(boards, boardWinners, activeBoard, aiDifficulty);
-      if (move) {
-        handleCellClick(move.board, move.cell);
-      }
-      setIsAiThinking(false);
-    }, 500); // Small delay for UX
-
-    return () => {
-      if (aiTimeoutRef.current) {
-        clearTimeout(aiTimeoutRef.current);
-      }
-    };
-  }, [gameMode, currentPlayer, gameWinner, boards, boardWinners, activeBoard, aiDifficulty, isAiThinking, getAiMove]);
-
-  const handleCellClick = (boardIndex, cellIndex) => {
-    // Check if move is valid
-    if (gameWinner) return;
-    if (boards[boardIndex][cellIndex]) return;
-    if (boardWinners[boardIndex]) return;
-    if (activeBoard !== null && activeBoard !== boardIndex) return;
-    // Block clicks during AI's turn
-    if (gameMode === 'ai' && currentPlayer === 'O') return;
-
-    // Make the move
+  // Core move logic - used by both human and AI
+  const executeMove = useCallback((boardIndex, cellIndex, player) => {
     const newBoards = boards.map(b => [...b]);
-    newBoards[boardIndex][cellIndex] = currentPlayer;
+    newBoards[boardIndex][cellIndex] = player;
     setBoards(newBoards);
     setLastMove({ board: boardIndex, cell: cellIndex });
 
@@ -317,7 +287,41 @@ const UltimateTicTacToe = () => {
       setActiveBoard(nextBoard);
     }
 
-    setCurrentPlayer(currentPlayer === 'X' ? 'O' : 'X');
+    setCurrentPlayer(player === 'X' ? 'O' : 'X');
+  }, [boards, boardWinners, checkWinner]);
+
+  // AI turn effect
+  useEffect(() => {
+    if (gameMode !== 'ai' || currentPlayer !== 'O' || gameWinner || isAiThinking) {
+      return;
+    }
+
+    setIsAiThinking(true);
+    aiTimeoutRef.current = setTimeout(() => {
+      const move = getAiMove(boards, boardWinners, activeBoard, aiDifficulty);
+      if (move) {
+        executeMove(move.board, move.cell, 'O');
+      }
+      setIsAiThinking(false);
+    }, 500); // Small delay for UX
+
+    return () => {
+      if (aiTimeoutRef.current) {
+        clearTimeout(aiTimeoutRef.current);
+      }
+    };
+  }, [gameMode, currentPlayer, gameWinner, boards, boardWinners, activeBoard, aiDifficulty, isAiThinking, getAiMove, executeMove]);
+
+  const handleCellClick = (boardIndex, cellIndex) => {
+    // Check if move is valid
+    if (gameWinner) return;
+    if (boards[boardIndex][cellIndex]) return;
+    if (boardWinners[boardIndex]) return;
+    if (activeBoard !== null && activeBoard !== boardIndex) return;
+    // Block clicks during AI's turn
+    if (gameMode === 'ai' && currentPlayer === 'O') return;
+
+    executeMove(boardIndex, cellIndex, currentPlayer);
   };
 
   const resetGame = () => {

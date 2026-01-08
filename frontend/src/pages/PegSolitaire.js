@@ -51,6 +51,7 @@ const PegSolitaire = () => {
   const [isSolving, setIsSolving] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [solutionMoves, setSolutionMoves] = useState([]);
+  const [noSolutionFound, setNoSolutionFound] = useState(false);
   const solveIntervalRef = useRef(null);
 
   function cloneBoard(layout) {
@@ -77,6 +78,7 @@ const PegSolitaire = () => {
     setIsSolving(false);
     setIsThinking(false);
     setSolutionMoves([]);
+    setNoSolutionFound(false);
   }, [boardType]);
 
   // Find valid moves for a peg
@@ -181,14 +183,18 @@ const PegSolitaire = () => {
     setMoveHistory(moveHistory.slice(0, -1));
     setGameOver(false);
     setIsSolved(false);
+    setNoSolutionFound(false);
     setSelectedPeg(null);
     setValidMoves([]);
   };
 
-  // Optimised DFS solver with memoisation
-  const findSolution = useCallback((startBoard) => {
-    const solution = [];
+  // Optimised DFS solver - finds any solution (centre peg preferred)
+  const findSolution = useCallback((startBoard, requireCentre = false) => {
+    let bestSolution = null;
+    let centreFound = false;
     const visited = new Set();
+    let iterations = 0;
+    const maxIterations = 500000; // Prevent infinite loops
 
     // Convert board to string for memoisation
     const boardToKey = (board) => {
@@ -249,11 +255,20 @@ const PegSolitaire = () => {
     };
 
     const dfs = (board, moves) => {
+      iterations++;
+      if (iterations > maxIterations) return false;
+      if (centreFound) return false; // Stop if we already found centre solution
+
       const pegCount = countPegs(board);
       if (pegCount === 1) {
         if (board[3][3] === 1) {
-          solution.push(...moves);
+          bestSolution = [...moves];
+          centreFound = true;
           return true;
+        }
+        // Accept any 1-peg solution if we don't require centre
+        if (!requireCentre && !bestSolution) {
+          bestSolution = [...moves];
         }
         return false;
       }
@@ -276,6 +291,10 @@ const PegSolitaire = () => {
         board[er][ec] = 1;
 
         if (dfs(board, [...moves, { from: move.from, to: move.to }])) {
+          // Undo for other branches
+          board[sr][sc] = 1;
+          board[mr][mc] = 1;
+          board[er][ec] = 0;
           return true;
         }
 
@@ -290,25 +309,31 @@ const PegSolitaire = () => {
     // Clone start board for DFS
     const workingBoard = startBoard.map(r => [...r]);
     dfs(workingBoard, []);
-    return solution;
+    return bestSolution || [];
   }, []);
 
-  // Solve with animation
+  // Solve with animation - from current board state
   const solvePuzzle = useCallback(() => {
+    // Check if there are any valid moves first
+    const currentMoves = findAllValidMoves(board);
+    if (currentMoves.length === 0) {
+      // No moves available - already stuck
+      setNoSolutionFound(true);
+      setGameOver(true);
+      return;
+    }
+
     setIsSolving(true);
     setIsThinking(true);
-
-    // Reset to initial state
-    const config = BOARDS[boardType];
-    const startBoard = cloneBoard(config.layout);
-
-    setBoard(cloneBoard(config.layout));
-    setPegsRemaining(config.totalPegs);
-    setMoveHistory([]);
     setGameOver(false);
     setIsSolved(false);
+    setNoSolutionFound(false);
     setSelectedPeg(null);
     setValidMoves([]);
+
+    // Use current board state
+    const startBoard = cloneBoard(board);
+    const startPegs = pegsRemaining;
 
     // Run solver in setTimeout to allow UI to update with thinking state
     setTimeout(() => {
@@ -317,12 +342,14 @@ const PegSolitaire = () => {
 
       if (solution.length === 0) {
         setIsSolving(false);
-        alert('No solution found for this board configuration.');
+        setGameOver(true);
+        setIsSolved(false);
+        setNoSolutionFound(true);
         return;
       }
 
-      let currentBoard = cloneBoard(config.layout);
-      let currentPegs = config.totalPegs;
+      let currentBoard = cloneBoard(board);
+      let currentPegs = startPegs;
       let moveIndex = 0;
 
       solveIntervalRef.current = setInterval(() => {
@@ -351,7 +378,7 @@ const PegSolitaire = () => {
         moveIndex++;
       }, 400);
     }, 50);
-  }, [boardType, findSolution]);
+  }, [board, pegsRemaining, findAllValidMoves, findSolution]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -437,11 +464,13 @@ const PegSolitaire = () => {
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
             className={`mb-4 p-4 rounded-lg font-bold ${
-              isSolved ? 'bg-green-600' : 'bg-red-600'
+              isSolved ? 'bg-green-600' : noSolutionFound ? 'bg-orange-600' : 'bg-red-600'
             }`}
           >
             {isSolved
               ? 'Perfect! You solved it!'
+              : noSolutionFound
+              ? 'No solution possible from this position!'
               : `Game Over! ${pegsRemaining} peg${pegsRemaining > 1 ? 's' : ''} remaining`}
           </motion.div>
         )}
@@ -462,7 +491,6 @@ const PegSolitaire = () => {
                     onClick={() => handleCellClick(rowIdx, colIdx)}
                     whileHover={cell === 1 && !isSolving ? { scale: 1.1 } : {}}
                     whileTap={cell === 1 && !isSolving ? { scale: 0.95 } : {}}
-                    layout
                   >
                     {cell === 1 && (
                       <div className={`w-full h-full rounded-full shadow-lg ${
@@ -498,9 +526,9 @@ const PegSolitaire = () => {
         <button
           onClick={solvePuzzle}
           className="btn bg-green-600 hover:bg-green-500"
-          disabled={isSolving}
+          disabled={isSolving || gameOver}
         >
-          {isThinking ? 'Thinking...' : isSolving ? 'Solving...' : 'Show Solution'}
+          {isThinking ? 'Thinking...' : isSolving ? 'Solving...' : 'Solve'}
         </button>
       </div>
 

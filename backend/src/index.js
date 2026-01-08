@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
+const http = require('http');
+const { initWebSocket } = require('./wireless');
 
 // Load environment variables
 dotenv.config();
@@ -23,13 +25,17 @@ app.use('/api/games', gameRoutes);
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../frontend/build')));
-  
+
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../../frontend/build', 'index.html'));
   });
 }
 
+// Create HTTP server and attach WebSocket
+const server = http.createServer(app);
+initWebSocket(server);
+
 // Start server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server running on port ${port}`);
 }); 

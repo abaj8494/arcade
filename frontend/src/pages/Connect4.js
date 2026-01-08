@@ -18,6 +18,9 @@ const Connect4 = () => {
   const [aiDifficulty, setAiDifficulty] = useState('medium'); // 'easy', 'medium', 'hard'
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [hoverCol, setHoverCol] = useState(null);
+  const [lastAiMove, setLastAiMove] = useState(null); // { row, col }
+  const [replayingMove, setReplayingMove] = useState(false);
+  const [animatingCell, setAnimatingCell] = useState(null); // { row, col }
   const aiTimeoutRef = useRef(null);
 
   function createEmptyBoard() {
@@ -76,13 +79,21 @@ const Connect4 = () => {
     return -1;
   }, []);
 
-  const makeMove = useCallback((col, player) => {
+  const makeMove = useCallback((col, player, isAiMove = false) => {
     const row = getLowestEmptyRow(board, col);
-    if (row === -1 || winner) return false;
+    if (row === -1 || winner) return { success: false, row: -1 };
 
     const newBoard = board.map(r => [...r]);
     newBoard[row][col] = player;
     setBoard(newBoard);
+
+    // Track AI moves for replay
+    if (isAiMove) {
+      setLastAiMove({ row, col });
+      setAnimatingCell({ row, col });
+      // Clear animation state after animation completes
+      setTimeout(() => setAnimatingCell(null), 600);
+    }
 
     const result = checkWinner(newBoard);
     if (result) {
@@ -97,7 +108,7 @@ const Connect4 = () => {
       setCurrentPlayer(player === PLAYER_1 ? PLAYER_2 : PLAYER_1);
     }
 
-    return true;
+    return { success: true, row };
   }, [board, winner, getLowestEmptyRow, checkWinner]);
 
   const handleColumnClick = useCallback((col) => {
@@ -277,7 +288,7 @@ const Connect4 = () => {
       setIsAiThinking(true);
       aiTimeoutRef.current = setTimeout(() => {
         const col = getAiMove();
-        makeMove(col, PLAYER_2);
+        makeMove(col, PLAYER_2, true); // Pass isAiMove = true
         setIsAiThinking(false);
       }, 500);
     }
@@ -289,12 +300,26 @@ const Connect4 = () => {
     };
   }, [gameMode, currentPlayer, winner, getAiMove, makeMove]);
 
+  // Replay the last AI move animation
+  const replayAiMove = useCallback(() => {
+    if (!lastAiMove || replayingMove) return;
+    setReplayingMove(true);
+    setAnimatingCell({ row: lastAiMove.row, col: lastAiMove.col });
+    setTimeout(() => {
+      setAnimatingCell(null);
+      setReplayingMove(false);
+    }, 600);
+  }, [lastAiMove, replayingMove]);
+
   const resetGame = () => {
     setBoard(createEmptyBoard());
     setCurrentPlayer(PLAYER_1);
     setWinner(null);
     setWinningCells([]);
     setIsAiThinking(false);
+    setLastAiMove(null);
+    setAnimatingCell(null);
+    setReplayingMove(false);
     if (aiTimeoutRef.current) {
       clearTimeout(aiTimeoutRef.current);
     }
@@ -412,29 +437,35 @@ const Connect4 = () => {
         {/* Board grid */}
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}>
           {board.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-700 rounded-full flex items-center justify-center cursor-pointer relative overflow-hidden"
-                onClick={() => handleColumnClick(colIndex)}
-                onMouseEnter={() => setHoverCol(colIndex)}
-                onMouseLeave={() => setHoverCol(null)}
-              >
-                {cell && (
-                  <div
-                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
-                      cell === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
-                    } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''}`}
-                  />
-                )}
-              </div>
-            ))
+            row.map((cell, colIndex) => {
+              const isAnimating = animatingCell?.row === rowIndex && animatingCell?.col === colIndex;
+              return (
+                <div
+                  key={`${rowIndex}-${colIndex}`}
+                  className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-700 rounded-full flex items-center justify-center cursor-pointer relative overflow-hidden"
+                  onClick={() => handleColumnClick(colIndex)}
+                  onMouseEnter={() => setHoverCol(colIndex)}
+                  onMouseLeave={() => setHoverCol(null)}
+                >
+                  {cell && (
+                    <motion.div
+                      initial={isAnimating ? { y: -rowIndex * 48 - 50 } : false}
+                      animate={{ y: 0 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 20, duration: 0.5 }}
+                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
+                        cell === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
+                      } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''}`}
+                    />
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex gap-4 mt-6">
+      <div className="flex gap-4 mt-6 flex-wrap justify-center">
         <button
           onClick={resetGame}
           className="btn bg-primary hover:bg-indigo-600 text-white"
@@ -447,6 +478,15 @@ const Connect4 = () => {
         >
           Reset Scores
         </button>
+        {gameMode === 'ai' && lastAiMove && (
+          <button
+            onClick={replayAiMove}
+            disabled={replayingMove}
+            className="btn bg-yellow-600 hover:bg-yellow-500 text-white disabled:opacity-50"
+          >
+            {replayingMove ? 'Replaying...' : 'Replay AI Move'}
+          </button>
+        )}
       </div>
 
       <Link to="/" className="btn btn-secondary mt-6">
