@@ -93,12 +93,23 @@ const UltimateTicTacToe = () => {
 
   // Fast AI using minimax with alpha-beta pruning
   const getAiMove = useCallback((bds, winners, active, difficulty) => {
+    const startTime = performance.now();
+    console.log('=== UTTT AI DEBUG ===');
+    console.log('Active board:', active);
+    console.log('Board winners:', winners);
+    console.log('Difficulty:', difficulty);
+
     const moves = getValidMoves(bds, winners, active);
+    console.log('Valid moves:', moves.length);
     if (moves.length === 0) return null;
-    if (moves.length === 1) return moves[0];
+    if (moves.length === 1) {
+      console.log('Only one move available');
+      return moves[0];
+    }
 
     const AI = 'O';
     const HUMAN = 'X';
+    let nodeCount = 0;
 
     // Fast static evaluation
     const evaluate = (boards, boardWins) => {
@@ -154,6 +165,12 @@ const UltimateTicTacToe = () => {
 
     // Simple minimax with alpha-beta
     const minimax = (boards, boardWins, activeBoard, depth, alpha, beta, isMaximizing) => {
+      nodeCount++;
+      if (nodeCount > 50000) {
+        console.log('AI exceeded 50k nodes, returning early');
+        return 0;
+      }
+
       const gameResult = checkWinner(boardWins);
       if (gameResult) {
         if (gameResult.winner === AI) return 100000 + depth;
@@ -205,17 +222,23 @@ const UltimateTicTacToe = () => {
 
     // Depth based on difficulty (keep shallow for speed)
     const depth = difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3;
+    console.log('Search depth:', depth);
 
     // Easy mode: random chance
     if (difficulty === 'easy' && Math.random() < 0.4) {
-      return moves[Math.floor(Math.random() * moves.length)];
+      const move = moves[Math.floor(Math.random() * moves.length)];
+      console.log('Easy mode random move:', move);
+      console.log('Time:', (performance.now() - startTime).toFixed(2), 'ms');
+      return move;
     }
 
     // Quick check for immediate wins/blocks
     for (const move of moves) {
       const state = applyMove(bds, winners, move, AI);
       if (state.result && state.result.winner === AI) {
-        return move; // Winning move
+        console.log('Found winning move:', move);
+        console.log('Time:', (performance.now() - startTime).toFixed(2), 'ms');
+        return move;
       }
     }
 
@@ -223,7 +246,9 @@ const UltimateTicTacToe = () => {
     for (const move of moves) {
       const state = applyMove(bds, winners, move, HUMAN);
       if (state.result && state.result.winner === HUMAN) {
-        return move; // Block opponent's win
+        console.log('Blocking opponent win:', move);
+        console.log('Time:', (performance.now() - startTime).toFixed(2), 'ms');
+        return move;
       }
     }
 
@@ -245,10 +270,15 @@ const UltimateTicTacToe = () => {
     if (difficulty === 'medium' && Math.random() < 0.15) {
       const randomMoves = moves.filter(m => m.cell === 4 || m.board === 4 || [0,2,6,8].includes(m.cell));
       if (randomMoves.length > 0) {
-        return randomMoves[Math.floor(Math.random() * randomMoves.length)];
+        const move = randomMoves[Math.floor(Math.random() * randomMoves.length)];
+        console.log('Medium mode random move:', move);
+        console.log('Total nodes:', nodeCount, 'Time:', (performance.now() - startTime).toFixed(2), 'ms');
+        return move;
       }
     }
 
+    console.log('Best move:', bestMove, 'Score:', bestScore);
+    console.log('Total nodes:', nodeCount, 'Time:', (performance.now() - startTime).toFixed(2), 'ms');
     return bestMove;
   }, [getValidMoves, applyMove, checkWinner]);
 
@@ -327,24 +357,47 @@ const UltimateTicTacToe = () => {
     }
   }, [wireless.isConnected, wireless.playerNum, wireless.isPlayer1, gameMode]);
 
-  // AI turn effect
+  // AI turn effect - use ref to prevent cleanup from canceling the timeout
+  const aiStartedRef = useRef(false);
+
   useEffect(() => {
-    if (gameMode !== 'ai' || currentPlayer !== 'O' || gameWinner || isAiThinking) {
+    console.log('AI effect check:', { gameMode, currentPlayer, gameWinner, isAiThinking });
+    if (gameMode !== 'ai' || currentPlayer !== 'O' || gameWinner) {
+      aiStartedRef.current = false;
       return;
     }
 
+    // Prevent re-triggering if already started
+    if (aiStartedRef.current || isAiThinking) {
+      return;
+    }
+
+    console.log('AI turn starting...');
+    aiStartedRef.current = true;
     setIsAiThinking(true);
+
     aiTimeoutRef.current = setTimeout(() => {
-      const move = getAiMove(boards, boardWinners, activeBoard, aiDifficulty);
-      if (move) {
-        executeMove(move.board, move.cell, 'O');
+      console.log('AI setTimeout fired, calling getAiMove...');
+      try {
+        const move = getAiMove(boards, boardWinners, activeBoard, aiDifficulty);
+        console.log('getAiMove returned:', move);
+        if (move) {
+          executeMove(move.board, move.cell, 'O');
+        }
+      } catch (err) {
+        console.error('AI error:', err);
       }
       setIsAiThinking(false);
-    }, 500); // Small delay for UX
+      aiStartedRef.current = false;
+    }, 300);
 
     return () => {
-      if (aiTimeoutRef.current) {
-        clearTimeout(aiTimeoutRef.current);
+      // Only clear if we're no longer in AI mode or game ended
+      if (gameMode !== 'ai' || gameWinner) {
+        if (aiTimeoutRef.current) {
+          clearTimeout(aiTimeoutRef.current);
+        }
+        aiStartedRef.current = false;
       }
     };
   }, [gameMode, currentPlayer, gameWinner, boards, boardWinners, activeBoard, aiDifficulty, isAiThinking, getAiMove, executeMove]);

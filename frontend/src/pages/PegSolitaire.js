@@ -20,11 +20,12 @@ const BOARDS = {
   },
   european: {
     name: 'European',
+    // Base layout with all pegs - starting position will be set dynamically
     layout: [
       [null, null, 1, 1, 1, null, null],
       [null, 1, 1, 1, 1, 1, null],
       [1, 1, 1, 1, 1, 1, 1],
-      [1, 0, 1, 1, 1, 1, 1], // Position (3,1) empty - solvable
+      [1, 1, 1, 1, 1, 1, 1],
       [1, 1, 1, 1, 1, 1, 1],
       [null, 1, 1, 1, 1, 1, null],
       [null, null, 1, 1, 1, null, null],
@@ -32,6 +33,19 @@ const BOARDS = {
     totalPegs: 36,
   },
 };
+
+// Valid starting positions for European board (positions that lead to solvable puzzles)
+// W = winning/solvable starting positions from the symmetry diagram
+// Sorted by row then column so top-left comes first
+const EUROPEAN_VALID_STARTS = [
+  [0, 2], [0, 4],                 // Top row
+  [1, 3],                         // Row 1 - center only
+  [2, 0], [2, 3], [2, 6],         // Row 2 - edges and center
+  [3, 1], [3, 2], [3, 4], [3, 5], // Middle row
+  [4, 0], [4, 3], [4, 6],         // Row 4 - edges and center
+  [5, 3],                         // Row 5 - center only
+  [6, 2], [6, 4],                 // Bottom row
+].sort((a, b) => a[0] - b[0] || a[1] - b[1]); // Sort by row, then column
 
 const DIRECTIONS = [
   [-2, 0], // up
@@ -51,8 +65,8 @@ const PegSolitaire = () => {
   const [isSolved, setIsSolved] = useState(false);
   const [isSolving, setIsSolving] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [solutionMoves, setSolutionMoves] = useState([]);
   const [noSolutionFound, setNoSolutionFound] = useState(false);
+  const [euroStartIdx, setEuroStartIdx] = useState(0); // Index into EUROPEAN_VALID_STARTS
   const solveIntervalRef = useRef(null);
   const { showHelp, toggleHelp } = useHelpVisibility();
 
@@ -60,17 +74,33 @@ const PegSolitaire = () => {
     return layout.map(row => [...row]);
   }
 
-  // Initialize board when type changes
+  // Initialize board when type or start position changes
   useEffect(() => {
     resetGame();
-  }, [boardType]);
+  }, [boardType, euroStartIdx]);
 
   const resetGame = useCallback(() => {
     if (solveIntervalRef.current) {
       clearInterval(solveIntervalRef.current);
     }
     const config = BOARDS[boardType];
-    setBoard(cloneBoard(config.layout));
+    const newBoard = cloneBoard(config.layout);
+
+    // For European board, set the starting empty position
+    if (boardType === 'european') {
+      const [startRow, startCol] = EUROPEAN_VALID_STARTS[euroStartIdx];
+      // Fill all positions first, then make the start position empty
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+          if (newBoard[r][c] !== null) {
+            newBoard[r][c] = 1;
+          }
+        }
+      }
+      newBoard[startRow][startCol] = 0;
+    }
+
+    setBoard(newBoard);
     setPegsRemaining(config.totalPegs);
     setSelectedPeg(null);
     setValidMoves([]);
@@ -79,9 +109,8 @@ const PegSolitaire = () => {
     setIsSolved(false);
     setIsSolving(false);
     setIsThinking(false);
-    setSolutionMoves([]);
     setNoSolutionFound(false);
-  }, [boardType]);
+  }, [boardType, euroStartIdx]);
 
   // Find valid moves for a peg
   const findValidMovesForPeg = useCallback((board, row, col) => {
@@ -163,13 +192,23 @@ const PegSolitaire = () => {
     const allMoves = findAllValidMoves(newBoard);
     if (allMoves.length === 0) {
       setGameOver(true);
-      if (newPegsRemaining === 1 && newBoard[3][3] === 1) {
-        setIsSolved(true);
+      // British: single peg must be at center (3,3)
+      // European: any single peg is a win
+      const isBritishBoard = boardType === 'british';
+      if (newPegsRemaining === 1) {
+        if (isBritishBoard) {
+          if (newBoard[3][3] === 1) {
+            setIsSolved(true);
+          }
+        } else {
+          // European - any single peg wins
+          setIsSolved(true);
+        }
       }
     }
 
     return newBoard;
-  }, [board, pegsRemaining, moveHistory, findAllValidMoves]);
+  }, [board, boardType, pegsRemaining, moveHistory, findAllValidMoves]);
 
   // Undo last move
   const undoMove = () => {
@@ -190,132 +229,177 @@ const PegSolitaire = () => {
     setValidMoves([]);
   };
 
-  // Optimised DFS solver - finds any solution (centre peg preferred)
-  const findSolution = useCallback((startBoard, requireCentre = false) => {
-    let bestSolution = null;
-    let centreFound = false;
-    const visited = new Set();
-    let iterations = 0;
-    const maxIterations = 500000; // Prevent infinite loops
+  // Async DFS solver - fast version without expensive symmetry computation
+  /* eslint-disable no-undef */
+  const findSolutionAsync = useCallback((startBoard, onProgress) => {
+    return new Promise((resolve) => {
+      console.log('=== PEG SOLITAIRE SOLVER START ===');
 
-    // Convert board to string for memoisation
-    const boardToKey = (board) => {
-      return board.map(row => row.map(c => c === null ? 'x' : c).join('')).join('');
-    };
+      let solution = null;
+      let expanded = 0;
+      const maxExpansions = 12000000;
+      const visited = new Set();
 
-    const getAllMoves = (board) => {
-      const moves = [];
-      // Prioritise moves towards centre for better pruning
-      const order = [[3,3], [2,3], [3,2], [3,4], [4,3], [2,2], [2,4], [4,2], [4,4]];
-      const checked = new Set();
-
-      // Check centre-adjacent positions first
-      for (const [r, c] of order) {
-        if (board[r]?.[c] === 1) {
-          for (const [dr, dc] of DIRECTIONS) {
-            const midR = r + dr / 2;
-            const midC = c + dc / 2;
-            const endR = r + dr;
-            const endC = c + dc;
-            if (endR >= 0 && endR < 7 && endC >= 0 && endC < 7 &&
-                board[midR]?.[midC] === 1 && board[endR]?.[endC] === 0) {
-              moves.push({ from: [r, c], to: [endR, endC], mid: [midR, midC] });
-            }
-          }
-          checked.add(`${r},${c}`);
-        }
-      }
-
-      // Check remaining positions
+      // Count valid positions to detect board type
+      let numPositions = 0;
       for (let r = 0; r < 7; r++) {
         for (let c = 0; c < 7; c++) {
-          if (board[r][c] === 1 && !checked.has(`${r},${c}`)) {
-            for (const [dr, dc] of DIRECTIONS) {
-              const midR = r + dr / 2;
-              const midC = c + dc / 2;
-              const endR = r + dr;
-              const endC = c + dc;
-              if (endR >= 0 && endR < 7 && endC >= 0 && endC < 7 &&
-                  board[midR]?.[midC] === 1 && board[endR]?.[endC] === 0) {
-                moves.push({ from: [r, c], to: [endR, endC], mid: [midR, midC] });
+          if (startBoard[r][c] !== null) numPositions++;
+        }
+      }
+      const isBritish = numPositions === 33;
+      console.log(`Board type: ${isBritish ? 'British' : 'European'} (${numPositions} positions)`);
+
+      // Fast state encoding: pack board into a string key
+      const encodeBoard = (board) => {
+        let key = '';
+        for (let r = 0; r < 7; r++) {
+          for (let c = 0; c < 7; c++) {
+            if (board[r][c] !== null) {
+              key += board[r][c];
+            }
+          }
+        }
+        return key;
+      };
+
+      // Count pegs
+      const countPegs = (board) => {
+        let count = 0;
+        for (let r = 0; r < 7; r++) {
+          for (let c = 0; c < 7; c++) {
+            if (board[r][c] === 1) count++;
+          }
+        }
+        return count;
+      };
+
+      // Check if solved
+      const isSolved = (board) => {
+        const pegs = countPegs(board);
+        if (pegs !== 1) return false;
+        if (isBritish) return board[3][3] === 1;
+        return true;
+      };
+
+      // Get valid moves - order matches Python: up, left, down, right
+      const getValidMoves = (board) => {
+        const moves = [];
+        for (let r = 0; r < 7; r++) {
+          for (let c = 0; c < 7; c++) {
+            if (board[r][c] !== 1) continue;
+            // up
+            if (r > 1 && board[r-1][c] === 1 && board[r-2][c] === 0)
+              moves.push({ from: [r, c], to: [r-2, c], over: [r-1, c] });
+            // left
+            if (c > 1 && board[r][c-1] === 1 && board[r][c-2] === 0)
+              moves.push({ from: [r, c], to: [r, c-2], over: [r, c-1] });
+            // down
+            if (r < 5 && board[r+1][c] === 1 && board[r+2][c] === 0)
+              moves.push({ from: [r, c], to: [r+2, c], over: [r+1, c] });
+            // right
+            if (c < 5 && board[r][c+1] === 1 && board[r][c+2] === 0)
+              moves.push({ from: [r, c], to: [r, c+2], over: [r, c+1] });
+          }
+        }
+        return moves;
+      };
+
+      const makeMove = (board, move) => {
+        board[move.from[0]][move.from[1]] = 0;
+        board[move.over[0]][move.over[1]] = 0;
+        board[move.to[0]][move.to[1]] = 1;
+      };
+      const undoMove = (board, move) => {
+        board[move.from[0]][move.from[1]] = 1;
+        board[move.over[0]][move.over[1]] = 1;
+        board[move.to[0]][move.to[1]] = 0;
+      };
+
+      const board = startBoard.map(row => [...row]);
+      const solutionMoves = [];
+
+      // Mark initial state
+      visited.add(encodeBoard(board));
+      expanded++;
+
+      if (isSolved(board)) {
+        resolve([]);
+        return;
+      }
+
+      const stack = [{ moves: getValidMoves(board), moveIdx: 0 }];
+      const CHUNK_SIZE = 20000;
+      let iterations = 0;
+
+      const processChunk = () => {
+        const chunkStart = iterations;
+
+        while (stack.length > 0 && !solution && expanded < maxExpansions) {
+          iterations++;
+          if (iterations - chunkStart >= CHUNK_SIZE) {
+            setTimeout(processChunk, 0);
+            return;
+          }
+
+          const frame = stack[stack.length - 1];
+          let foundMove = false;
+
+          while (frame.moveIdx < frame.moves.length) {
+            const move = frame.moves[frame.moveIdx];
+            frame.moveIdx++;
+
+            makeMove(board, move);
+            const stateKey = encodeBoard(board);
+
+            if (!visited.has(stateKey)) {
+              visited.add(stateKey);
+              expanded++;
+
+              if (expanded % 500000 === 0) {
+                console.log(`Expanded: ${expanded}, depth: ${solutionMoves.length + 1}`);
               }
+
+              if (isSolved(board)) {
+                console.log(`FOUND SOLUTION! Expanded ${expanded} states.`);
+                solutionMoves.push(move);
+                solution = solutionMoves.map(m => ({ from: m.from, to: m.to }));
+                break;
+              }
+
+              solutionMoves.push(move);
+              stack.push({ moves: getValidMoves(board), moveIdx: 0 });
+              foundMove = true;
+              break;
+            } else {
+              undoMove(board, move);
+            }
+          }
+
+          if (solution) break;
+
+          if (!foundMove) {
+            stack.pop();
+            if (solutionMoves.length > 0) {
+              undoMove(board, solutionMoves.pop());
             }
           }
         }
-      }
-      return moves;
-    };
 
-    const countPegs = (board) => {
-      let count = 0;
-      for (let r = 0; r < 7; r++) {
-        for (let c = 0; c < 7; c++) {
-          if (board[r][c] === 1) count++;
-        }
-      }
-      return count;
-    };
+        console.log('=== SOLVER FINISHED ===');
+        console.log('Total expanded:', expanded);
+        console.log('Solution found:', solution ? `Yes, ${solution.length} moves` : 'No');
 
-    const dfs = (board, moves) => {
-      iterations++;
-      if (iterations > maxIterations) return false;
-      if (centreFound) return false; // Stop if we already found centre solution
+        resolve(solution || []);
+      };
 
-      const pegCount = countPegs(board);
-      if (pegCount === 1) {
-        if (board[3][3] === 1) {
-          bestSolution = [...moves];
-          centreFound = true;
-          return true;
-        }
-        // Accept any 1-peg solution if we don't require centre
-        if (!requireCentre && !bestSolution) {
-          bestSolution = [...moves];
-        }
-        return false;
-      }
-
-      const key = boardToKey(board);
-      if (visited.has(key)) return false;
-      visited.add(key);
-
-      const possibleMoves = getAllMoves(board);
-      if (possibleMoves.length === 0) return false;
-
-      for (const move of possibleMoves) {
-        const [sr, sc] = move.from;
-        const [er, ec] = move.to;
-        const [mr, mc] = move.mid;
-
-        // Make move in-place for speed
-        board[sr][sc] = 0;
-        board[mr][mc] = 0;
-        board[er][ec] = 1;
-
-        if (dfs(board, [...moves, { from: move.from, to: move.to }])) {
-          // Undo for other branches
-          board[sr][sc] = 1;
-          board[mr][mc] = 1;
-          board[er][ec] = 0;
-          return true;
-        }
-
-        // Undo move
-        board[sr][sc] = 1;
-        board[mr][mc] = 1;
-        board[er][ec] = 0;
-      }
-      return false;
-    };
-
-    // Clone start board for DFS
-    const workingBoard = startBoard.map(r => [...r]);
-    dfs(workingBoard, []);
-    return bestSolution || [];
+      processChunk();
+    });
   }, []);
+  /* eslint-enable no-undef */
 
   // Solve with animation - from current board state
-  const solvePuzzle = useCallback(() => {
+  const solvePuzzle = useCallback(async () => {
     // Check if there are any valid moves first
     const currentMoves = findAllValidMoves(board);
     if (currentMoves.length === 0) {
@@ -337,50 +421,48 @@ const PegSolitaire = () => {
     const startBoard = cloneBoard(board);
     const startPegs = pegsRemaining;
 
-    // Run solver in setTimeout to allow UI to update with thinking state
-    setTimeout(() => {
-      const solution = findSolution(startBoard);
-      setIsThinking(false);
+    // Run async solver (yields to event loop periodically)
+    const solution = await findSolutionAsync(startBoard);
+    setIsThinking(false);
 
-      if (solution.length === 0) {
+    if (solution.length === 0) {
+      setIsSolving(false);
+      setGameOver(true);
+      setIsSolved(false);
+      setNoSolutionFound(true);
+      return;
+    }
+
+    let currentBoard = cloneBoard(board);
+    let currentPegs = startPegs;
+    let moveIndex = 0;
+
+    solveIntervalRef.current = setInterval(() => {
+      if (moveIndex >= solution.length) {
+        clearInterval(solveIntervalRef.current);
         setIsSolving(false);
         setGameOver(true);
-        setIsSolved(false);
-        setNoSolutionFound(true);
+        setIsSolved(true);
         return;
       }
 
-      let currentBoard = cloneBoard(board);
-      let currentPegs = startPegs;
-      let moveIndex = 0;
+      const move = solution[moveIndex];
+      const [startRow, startCol] = move.from;
+      const [endRow, endCol] = move.to;
+      const midRow = (startRow + endRow) / 2;
+      const midCol = (startCol + endCol) / 2;
 
-      solveIntervalRef.current = setInterval(() => {
-        if (moveIndex >= solution.length) {
-          clearInterval(solveIntervalRef.current);
-          setIsSolving(false);
-          setGameOver(true);
-          setIsSolved(true);
-          return;
-        }
-
-        const move = solution[moveIndex];
-        const [startRow, startCol] = move.from;
-        const [endRow, endCol] = move.to;
-        const midRow = (startRow + endRow) / 2;
-        const midCol = (startCol + endCol) / 2;
-
-        currentBoard[startRow][startCol] = 0;
-        currentBoard[midRow][midCol] = 0;
-        currentBoard[endRow][endCol] = 1;
-        currentPegs--;
+      currentBoard[startRow][startCol] = 0;
+      currentBoard[midRow][midCol] = 0;
+      currentBoard[endRow][endCol] = 1;
+      currentPegs--;
 
         setBoard([...currentBoard.map(r => [...r])]);
         setPegsRemaining(currentPegs);
 
         moveIndex++;
       }, 400);
-    }, 50);
-  }, [board, pegsRemaining, findAllValidMoves, findSolution]);
+  }, [board, pegsRemaining, findAllValidMoves, findSolutionAsync]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -420,7 +502,11 @@ const PegSolitaire = () => {
         <h1 className="text-3xl font-bold">Peg Solitaire</h1>
         <HelpButton onClick={toggleHelp} isActive={showHelp} />
       </div>
-      <p className="text-gray-400 mb-4">Remove all pegs except one in the centre</p>
+      <p className="text-gray-400 mb-4">
+        {boardType === 'british'
+          ? 'Remove all pegs except one in the centre'
+          : 'Remove all pegs until only one remains'}
+      </p>
 
       {/* Board Type Selection */}
       <div className="mb-4 flex gap-4">
@@ -435,6 +521,30 @@ const PegSolitaire = () => {
           </button>
         ))}
       </div>
+
+      {/* European Starting Position Selector */}
+      {boardType === 'european' && (
+        <div className="mb-4 flex items-center gap-3">
+          <span className="text-gray-400">Starting position</span>
+          <button
+            onClick={() => setEuroStartIdx((euroStartIdx - 1 + EUROPEAN_VALID_STARTS.length) % EUROPEAN_VALID_STARTS.length)}
+            disabled={isSolving}
+            className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded disabled:opacity-50 disabled:cursor-not-allowed text-lg font-bold"
+          >
+            ←
+          </button>
+          <span className="text-white font-mono w-16 text-center">
+            ({EUROPEAN_VALID_STARTS[euroStartIdx][0]},{EUROPEAN_VALID_STARTS[euroStartIdx][1]})
+          </span>
+          <button
+            onClick={() => setEuroStartIdx((euroStartIdx + 1) % EUROPEAN_VALID_STARTS.length)}
+            disabled={isSolving}
+            className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded disabled:opacity-50 disabled:cursor-not-allowed text-lg font-bold"
+          >
+            →
+          </button>
+        </div>
+      )}
 
       {/* Status */}
       <div className="mb-4 flex gap-6 text-lg">
@@ -546,7 +656,7 @@ const PegSolitaire = () => {
             <li>Click a valid empty hole to jump to it</li>
             <li>Pegs can only jump over adjacent pegs</li>
             <li>The jumped-over peg is removed</li>
-            <li>Goal: Leave exactly 1 peg in the centre</li>
+            <li>Goal: {boardType === 'british' ? 'Leave exactly 1 peg in the centre' : 'Leave exactly 1 peg anywhere'}</li>
           </ul>
         </div>
       )}

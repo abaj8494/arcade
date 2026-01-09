@@ -1,29 +1,33 @@
 // Game controller with endpoints for game data and logic
 const { execSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
-// List of available games
+// Persistent storage path for leaderboards
+const LEADERBOARD_FILE = path.join(__dirname, '../../../data/minesweeper-leaderboard.json');
+
+// List of available games (alphabetically sorted)
 const games = [
-  { id: 'towers-of-hanoi', name: 'Towers of Hanoi', image: '/images/hanoi.png', implemented: true },
-  { id: 'tic-tac-toe', name: 'Tic Tac Toe', image: '/images/tictactoe.svg', implemented: true },
-  { id: 'connect4', name: 'Connect 4', image: '/images/connect4.png', implemented: true },
-  { id: 'sudoku', name: 'Sudoku', image: '/images/sudoku.svg', implemented: true },
-  { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.svg', implemented: true },
   { id: 'banagrams-solver', name: 'Banagrams Solver', image: '/images/banagrams.svg', implemented: false },
+  { id: 'battleships', name: 'Battleships', image: '/images/battleships.svg', implemented: true },
+  { id: 'brick-breaker', name: 'Brick Breaker', image: '/images/brick-breaker.svg', implemented: true },
   { id: 'chess', name: 'Chess', image: '/images/chess.svg', implemented: true },
-  { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
-  { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
-  { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
+  { id: 'connect4', name: 'Connect 4', image: '/images/connect4.png', implemented: true },
+  { id: 'game-of-life', name: 'Game of Life', image: '/images/game-of-life.svg', implemented: true },
   { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: true },
   { id: 'knights-tour', name: "Knight's Tour", image: '/images/knights-tour.svg', implemented: true },
-  { id: 'game-of-life', name: 'Game of Life', image: '/images/game-of-life.svg', implemented: true },
-  { id: 'rock-paper-scissors', name: 'Rock Paper Scissors', image: '/images/rps.svg', implemented: true },
-  { id: 'sydney-train-game', name: 'Sydney Train Game', image: '/images/train-game.svg', implemented: true },
-  { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true },
-  { id: 'brick-breaker', name: 'Brick Breaker', image: '/images/brick-breaker.svg', implemented: true },
-  { id: 'n-queens', name: 'N-Queens', image: '/images/n-queens.svg', implemented: true },
   { id: 'minesweeper', name: 'Minesweeper', image: '/images/minesweeper.svg', implemented: true },
-  { id: 'battleships', name: 'Battleships', image: '/images/battleships.svg', implemented: true }
+  { id: 'n-queens', name: 'N-Queens', image: '/images/n-queens.svg', implemented: true },
+  { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true },
+  { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
+  { id: 'rock-paper-scissors', name: 'Rock Paper Scissors', image: '/images/rps.svg', implemented: true },
+  { id: 'snake', name: 'Snake', image: '/images/snake.png', implemented: true },
+  { id: 'sudoku', name: 'Sudoku', image: '/images/sudoku.svg', implemented: true },
+  { id: 'sydney-train-game', name: 'Sydney Train Game', image: '/images/train-game.svg', implemented: true },
+  { id: 'tetris', name: 'Tetris', image: '/images/tetris.png', implemented: true },
+  { id: 'tic-tac-toe', name: 'Tic Tac Toe', image: '/images/tictactoe.svg', implemented: true },
+  { id: 'towers-of-hanoi', name: 'Towers of Hanoi', image: '/images/hanoi.png', implemented: true },
+  { id: 'ultimate-tic-tac-toe', name: 'Ultimate Tic Tac Toe', image: '/images/uttt.svg', implemented: true },
 ];
 
 // Get all games
@@ -121,4 +125,79 @@ exports.generateHashiPuzzle = (req, res) => {
     console.error('Error generating Hashi puzzle:', err);
     res.status(500).json({ error: 'Failed to generate puzzle' });
   }
-}; 
+};
+
+// Helper to ensure data directory and leaderboard file exist
+const ensureLeaderboardFile = () => {
+  const dataDir = path.dirname(LEADERBOARD_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(LEADERBOARD_FILE)) {
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify({
+      beginner: [],
+      intermediate: [],
+      expert: []
+    }, null, 2));
+  }
+};
+
+// Get Minesweeper leaderboard
+exports.getMinesweeperLeaderboard = (req, res) => {
+  try {
+    ensureLeaderboardFile();
+    const data = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    console.error('Error reading leaderboard:', err);
+    res.status(500).json({ error: 'Failed to read leaderboard' });
+  }
+};
+
+// Add score to Minesweeper leaderboard
+exports.addMinesweeperScore = (req, res) => {
+  try {
+    const { name, difficulty, time } = req.body;
+
+    // Validate input
+    if (!name || !difficulty || typeof time !== 'number') {
+      return res.status(400).json({ error: 'Missing required fields: name, difficulty, time' });
+    }
+
+    if (!['beginner', 'intermediate', 'expert'].includes(difficulty)) {
+      return res.status(400).json({ error: 'Invalid difficulty level' });
+    }
+
+    // Sanitize name (limit length, remove special chars)
+    const sanitizedName = name.slice(0, 20).replace(/[<>]/g, '');
+
+    ensureLeaderboardFile();
+    const data = JSON.parse(fs.readFileSync(LEADERBOARD_FILE, 'utf8'));
+
+    // Add new score
+    data[difficulty].push({
+      name: sanitizedName,
+      time: Math.floor(time),
+      date: new Date().toISOString()
+    });
+
+    // Sort by time (ascending) and keep top 10
+    data[difficulty].sort((a, b) => a.time - b.time);
+    data[difficulty] = data[difficulty].slice(0, 10);
+
+    // Write back to file
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(data, null, 2));
+
+    // Return the rank (1-indexed, or null if not in top 10)
+    const rank = data[difficulty].findIndex(s => s.name === sanitizedName && s.time === Math.floor(time));
+
+    res.json({
+      success: true,
+      rank: rank !== -1 ? rank + 1 : null,
+      leaderboard: data
+    });
+  } catch (err) {
+    console.error('Error adding score:', err);
+    res.status(500).json({ error: 'Failed to add score' });
+  }
+};
