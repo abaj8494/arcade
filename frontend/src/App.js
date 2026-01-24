@@ -14,6 +14,7 @@ import Pong from './pages/Pong';
 import Hashiwokakero from './pages/Hashiwokakero';
 import KnightsTour from './pages/KnightsTour';
 import GameOfLife from './pages/GameOfLife';
+import Go from './pages/Go';
 import RockPaperScissors from './pages/RockPaperScissors';
 import SydneyTrainGame from './pages/SydneyTrainGame';
 import PegSolitaire from './pages/PegSolitaire';
@@ -21,7 +22,8 @@ import BrickBreaker from './pages/BrickBreaker';
 import NQueens from './pages/NQueens';
 import Minesweeper from './pages/Minesweeper';
 import Battleships from './pages/Battleships';
-import GamePlaceholder from './pages/GamePlaceholder';
+import Othello from './pages/Othello';
+import BubbleBurst from './pages/BubbleBurst';
 
 function App() {
   return (
@@ -35,7 +37,6 @@ function App() {
           <Route path="/game/connect4" element={<Connect4 />} />
           <Route path="/game/sudoku" element={<Sudoku />} />
           <Route path="/game/ultimate-tic-tac-toe" element={<UltimateTicTacToe />} />
-          <Route path="/game/banagrams-solver" element={<GamePlaceholder name="Banagrams Solver" />} />
           <Route path="/game/chess" element={<Chess />} />
           <Route path="/game/tetris" element={<Tetris />} />
           <Route path="/game/snake" element={<Snake />} />
@@ -43,6 +44,7 @@ function App() {
           <Route path="/game/hashiwokakero" element={<Hashiwokakero />} />
           <Route path="/game/knights-tour" element={<KnightsTour />} />
           <Route path="/game/game-of-life" element={<GameOfLife />} />
+          <Route path="/game/go" element={<Go />} />
           <Route path="/game/rock-paper-scissors" element={<RockPaperScissors />} />
           <Route path="/game/sydney-train-game" element={<SydneyTrainGame />} />
           <Route path="/game/peg-solitaire" element={<PegSolitaire />} />
@@ -50,6 +52,8 @@ function App() {
           <Route path="/game/n-queens" element={<NQueens />} />
           <Route path="/game/minesweeper" element={<Minesweeper />} />
           <Route path="/game/battleships" element={<Battleships />} />
+          <Route path="/game/othello" element={<Othello />} />
+          <Route path="/game/bubble-burst" element={<BubbleBurst />} />
         </Routes>
       </main>
       <footer className="bg-surface py-4 text-center text-gray-400">

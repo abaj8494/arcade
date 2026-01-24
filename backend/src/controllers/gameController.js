@@ -5,19 +5,22 @@ const fs = require('fs');
 
 // Persistent storage path for leaderboards
 const LEADERBOARD_FILE = path.join(__dirname, '../../../data/minesweeper-leaderboard.json');
+const BUBBLE_BURST_LEADERBOARD_FILE = path.join(__dirname, '../../../data/bubble-burst-leaderboard.json');
 
 // List of available games (alphabetically sorted)
 const games = [
-  { id: 'banagrams-solver', name: 'Banagrams Solver', image: '/images/banagrams.svg', implemented: false },
   { id: 'battleships', name: 'Battleships', image: '/images/battleships.svg', implemented: true },
   { id: 'brick-breaker', name: 'Brick Breaker', image: '/images/brick-breaker.svg', implemented: true },
+  { id: 'bubble-burst', name: 'Bubble Burst', image: '/images/bubble-burst.svg', implemented: true },
   { id: 'chess', name: 'Chess', image: '/images/chess.svg', implemented: true },
   { id: 'connect4', name: 'Connect 4', image: '/images/connect4.png', implemented: true },
   { id: 'game-of-life', name: 'Game of Life', image: '/images/game-of-life.svg', implemented: true },
+  { id: 'go', name: 'Go', image: '/images/go.svg', implemented: true },
   { id: 'hashiwokakero', name: 'Hashiwokakero', image: '/images/hashi.png', implemented: true },
   { id: 'knights-tour', name: "Knight's Tour", image: '/images/knights-tour.svg', implemented: true },
   { id: 'minesweeper', name: 'Minesweeper', image: '/images/minesweeper.svg', implemented: true },
   { id: 'n-queens', name: 'N-Queens', image: '/images/n-queens.svg', implemented: true },
+  { id: 'othello', name: 'Othello', image: '/images/othello.svg', implemented: true },
   { id: 'peg-solitaire', name: 'Peg Solitaire', image: '/images/peg-solitaire.svg', implemented: true },
   { id: 'pong', name: 'Pong', image: '/images/pong.png', implemented: true },
   { id: 'rock-paper-scissors', name: 'Rock Paper Scissors', image: '/images/rps.svg', implemented: true },
@@ -198,6 +201,81 @@ exports.addMinesweeperScore = (req, res) => {
     });
   } catch (err) {
     console.error('Error adding score:', err);
+    res.status(500).json({ error: 'Failed to add score' });
+  }
+};
+
+// Helper to ensure Bubble Burst leaderboard file exists
+const ensureBubbleBurstLeaderboardFile = () => {
+  const dataDir = path.dirname(BUBBLE_BURST_LEADERBOARD_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(BUBBLE_BURST_LEADERBOARD_FILE)) {
+    fs.writeFileSync(BUBBLE_BURST_LEADERBOARD_FILE, JSON.stringify({
+      easy: [],
+      medium: [],
+      hard: []
+    }, null, 2));
+  }
+};
+
+// Get Bubble Burst leaderboard
+exports.getBubbleBurstLeaderboard = (req, res) => {
+  try {
+    ensureBubbleBurstLeaderboardFile();
+    const data = fs.readFileSync(BUBBLE_BURST_LEADERBOARD_FILE, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    console.error('Error reading Bubble Burst leaderboard:', err);
+    res.status(500).json({ error: 'Failed to read leaderboard' });
+  }
+};
+
+// Add score to Bubble Burst leaderboard
+exports.addBubbleBurstScore = (req, res) => {
+  try {
+    const { name, difficulty, score } = req.body;
+
+    // Validate input
+    if (!name || !difficulty || typeof score !== 'number') {
+      return res.status(400).json({ error: 'Missing required fields: name, difficulty, score' });
+    }
+
+    if (!['easy', 'medium', 'hard'].includes(difficulty)) {
+      return res.status(400).json({ error: 'Invalid difficulty level' });
+    }
+
+    // Sanitize name
+    const sanitizedName = name.slice(0, 20).replace(/[<>]/g, '');
+
+    ensureBubbleBurstLeaderboardFile();
+    const data = JSON.parse(fs.readFileSync(BUBBLE_BURST_LEADERBOARD_FILE, 'utf8'));
+
+    // Add new score
+    data[difficulty].push({
+      name: sanitizedName,
+      score: Math.floor(score),
+      date: new Date().toISOString()
+    });
+
+    // Sort by score (descending) and keep top 10
+    data[difficulty].sort((a, b) => b.score - a.score);
+    data[difficulty] = data[difficulty].slice(0, 10);
+
+    // Write back to file
+    fs.writeFileSync(BUBBLE_BURST_LEADERBOARD_FILE, JSON.stringify(data, null, 2));
+
+    // Return the rank
+    const rank = data[difficulty].findIndex(s => s.name === sanitizedName && s.score === Math.floor(score));
+
+    res.json({
+      success: true,
+      rank: rank !== -1 ? rank + 1 : null,
+      leaderboard: data
+    });
+  } catch (err) {
+    console.error('Error adding Bubble Burst score:', err);
     res.status(500).json({ error: 'Failed to add score' });
   }
 };
