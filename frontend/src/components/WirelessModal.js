@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConnectionState } from '../hooks/useWirelessGame';
 
@@ -39,31 +39,62 @@ export const WirelessButton = ({ onClick, isActive, disabled }) => (
   </button>
 );
 
-// Simple wireless modal - just shows waiting or connected
+// Wireless modal with room code support
 export const WirelessModal = ({
   isOpen,
   onClose,
   connectionState,
   playerNum,
+  roomCode,
   error,
-  onConnect,
+  onCreateRoom,
+  onJoinRoom,
   onDisconnect,
   gameName = 'Game'
 }) => {
+  const [joinCode, setJoinCode] = useState('');
+  const [mode, setMode] = useState(null); // null, 'create', 'join'
+
   if (!isOpen) return null;
 
-  // Close and disconnect (for X button and Cancel)
+  // Close and disconnect
   const handleCloseAndDisconnect = () => {
     if (connectionState === ConnectionState.WAITING ||
         connectionState === ConnectionState.CONNECTED) {
       onDisconnect();
     }
+    setMode(null);
+    setJoinCode('');
     onClose();
   };
 
   // Just close modal (for Start Playing)
   const handleJustClose = () => {
+    setMode(null);
+    setJoinCode('');
     onClose();
+  };
+
+  // Handle join code input
+  const handleJoinCodeChange = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+    setJoinCode(value);
+  };
+
+  // Submit join
+  const handleJoin = () => {
+    if (joinCode.length === 4) {
+      onJoinRoom(joinCode);
+    }
+  };
+
+  // Reset to initial state
+  const handleBack = () => {
+    if (connectionState === ConnectionState.WAITING) {
+      onDisconnect();
+    }
+    setMode(null);
+    setJoinCode('');
   };
 
   return (
@@ -103,9 +134,14 @@ export const WirelessModal = ({
                 <WifiIcon size={32} className="text-white" />
               </div>
               <p className="text-green-400 font-semibold text-lg mb-2">Connected!</p>
-              <p className="text-gray-400 mb-4">
+              <p className="text-gray-400 mb-1">
                 You are Player {playerNum}
               </p>
+              {roomCode && (
+                <p className="text-gray-500 text-sm mb-4">
+                  Room: {roomCode}
+                </p>
+              )}
               <button
                 onClick={handleJustClose}
                 className="btn bg-primary hover:bg-indigo-600 w-full"
@@ -115,20 +151,30 @@ export const WirelessModal = ({
             </div>
           )}
 
-          {/* Waiting State */}
+          {/* Waiting State (room created, waiting for opponent) */}
           {connectionState === ConnectionState.WAITING && (
             <div className="text-center">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-600 flex items-center justify-center animate-pulse">
                 <WifiIcon size={32} className="text-white" />
               </div>
               <p className="text-blue-400 font-semibold text-lg mb-2">
-                Waiting for opponent...
+                Room Created!
               </p>
+              {roomCode && (
+                <div className="mb-4">
+                  <p className="text-gray-400 text-sm mb-2">Share this code with your friend:</p>
+                  <div className="bg-gray-900 rounded-lg py-4 px-6 inline-block">
+                    <span className="text-4xl font-mono font-bold tracking-widest text-white">
+                      {roomCode}
+                    </span>
+                  </div>
+                </div>
+              )}
               <p className="text-sm text-gray-500 mb-4">
-                Ask your friend to press the wireless button on their device
+                Waiting for opponent to join...
               </p>
               <button
-                onClick={handleCloseAndDisconnect}
+                onClick={handleBack}
                 className="btn bg-gray-600 hover:bg-gray-500 w-full"
               >
                 Cancel
@@ -152,35 +198,75 @@ export const WirelessModal = ({
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-600 flex items-center justify-center">
                 <span className="text-3xl">!</span>
               </div>
-              <p className="text-red-400 font-semibold mb-2">Connection Error</p>
+              <p className="text-red-400 font-semibold mb-2">Error</p>
               <p className="text-gray-400 mb-4">{error || 'Unable to connect'}</p>
               <button
-                onClick={() => { onConnect(); }}
-                className="btn bg-primary hover:bg-indigo-600 w-full mb-2"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={handleCloseAndDisconnect}
+                onClick={handleBack}
                 className="btn bg-gray-600 hover:bg-gray-500 w-full"
               >
-                Cancel
+                Try Again
               </button>
             </div>
           )}
 
           {/* Initial/Disconnected State */}
-          {connectionState === ConnectionState.DISCONNECTED && (
+          {connectionState === ConnectionState.DISCONNECTED && !mode && (
             <div className="text-center">
               <p className="text-gray-400 mb-6">
                 Play {gameName} with a friend on another device
               </p>
-              <button
-                onClick={onConnect}
-                className="btn bg-primary hover:bg-indigo-600 w-full py-3"
-              >
-                Find Opponent
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setMode('create');
+                    onCreateRoom();
+                  }}
+                  className="btn bg-primary hover:bg-indigo-600 w-full py-3"
+                >
+                  Create Room
+                </button>
+                <button
+                  onClick={() => setMode('join')}
+                  className="btn bg-gray-600 hover:bg-gray-500 w-full py-3"
+                >
+                  Join Room
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Join Room Input */}
+          {connectionState === ConnectionState.DISCONNECTED && mode === 'join' && (
+            <div className="text-center">
+              <p className="text-gray-400 mb-4">
+                Enter the 4-digit room code
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={joinCode}
+                onChange={handleJoinCodeChange}
+                placeholder="0000"
+                className="w-full text-center text-3xl font-mono tracking-widest py-3 px-4 bg-gray-900 border border-gray-700 rounded-lg focus:border-primary focus:outline-none mb-4"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={handleBack}
+                  className="btn bg-gray-600 hover:bg-gray-500 flex-1"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleJoin}
+                  disabled={joinCode.length !== 4}
+                  className="btn bg-primary hover:bg-indigo-600 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Join
+                </button>
+              </div>
             </div>
           )}
         </motion.div>

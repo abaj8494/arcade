@@ -699,8 +699,10 @@ const UltimateTicTacToe = () => {
         onClose={() => setShowWirelessModal(false)}
         connectionState={wireless.connectionState}
         playerNum={wireless.playerNum}
+        roomCode={wireless.roomCode}
         error={wireless.error}
-        onConnect={wireless.connect}
+        onCreateRoom={wireless.createRoom}
+        onJoinRoom={wireless.joinRoom}
         onDisconnect={wireless.disconnect}
         gameName="Ultimate Tic Tac Toe"
       />

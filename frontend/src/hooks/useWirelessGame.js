@@ -15,10 +15,12 @@ export const ConnectionState = {
 export function useWirelessGame(gameType, onMove, onState) {
   const [connectionState, setConnectionState] = useState(ConnectionState.DISCONNECTED);
   const [playerNum, setPlayerNum] = useState(null);
+  const [roomCode, setRoomCode] = useState(null);
   const [error, setError] = useState(null);
 
   const wsRef = useRef(null);
   const pingIntervalRef = useRef(null);
+  const pendingActionRef = useRef(null); // 'create' or { type: 'join', code: 'XXXX' }
 
   // Keep callbacks in refs to avoid stale closures
   const onMoveRef = useRef(onMove);
@@ -43,6 +45,7 @@ export function useWirelessGame(gameType, onMove, onState) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    pendingActionRef.current = null;
   }, []);
 
   // Send message
@@ -54,11 +57,13 @@ export function useWirelessGame(gameType, onMove, onState) {
     return false;
   }, []);
 
-  // Connect and join
-  const connect = useCallback(() => {
+  // Internal connect and perform action
+  const connectAndDo = useCallback((action) => {
     cleanup();
     setConnectionState(ConnectionState.CONNECTING);
     setError(null);
+    setRoomCode(null);
+    pendingActionRef.current = action;
 
     try {
       const ws = new WebSocket(WS_URL);
@@ -70,8 +75,23 @@ export function useWirelessGame(gameType, onMove, onState) {
           send('ping');
         }, 25000);
 
-        // Auto-join
-        ws.send(JSON.stringify({ type: 'join', gameType }));
+        // Perform the pending action
+        const action = pendingActionRef.current;
+        console.log('WebSocket opened, pending action:', action, 'gameType:', gameType);
+
+        if (action === 'create') {
+          ws.send(JSON.stringify({ type: 'create', gameType }));
+        } else if (action?.type === 'join' && action?.code) {
+          ws.send(JSON.stringify({ type: 'join', roomCode: action.code, gameType }));
+        } else if (action?.type === 'join') {
+          // Join was called without a valid code - this shouldn't happen
+          console.error('Join action missing code:', action);
+          setError('Invalid room code');
+          setConnectionState(ConnectionState.ERROR);
+          ws.close();
+        } else {
+          console.error('Unknown pending action:', action);
+        }
       };
 
       ws.onmessage = (event) => {
@@ -79,12 +99,14 @@ export function useWirelessGame(gameType, onMove, onState) {
           const msg = JSON.parse(event.data);
 
           switch (msg.type) {
-            case 'waiting':
+            case 'roomCreated':
+              setRoomCode(msg.roomCode);
               setConnectionState(ConnectionState.WAITING);
               break;
 
             case 'connected':
               setPlayerNum(msg.playerNum);
+              setRoomCode(msg.roomCode);
               setConnectionState(ConnectionState.CONNECTED);
               break;
 
@@ -99,6 +121,7 @@ export function useWirelessGame(gameType, onMove, onState) {
             case 'opponentLeft':
               setConnectionState(ConnectionState.DISCONNECTED);
               setPlayerNum(null);
+              setRoomCode(null);
               cleanup();
               break;
 
@@ -123,6 +146,7 @@ export function useWirelessGame(gameType, onMove, onState) {
           setConnectionState(ConnectionState.DISCONNECTED);
         }
         setPlayerNum(null);
+        setRoomCode(null);
       };
 
       ws.onerror = () => {
@@ -134,7 +158,22 @@ export function useWirelessGame(gameType, onMove, onState) {
       setConnectionState(ConnectionState.ERROR);
       setError('Failed to connect');
     }
-  }, [cleanup, send, gameType]);
+  }, [cleanup, send, gameType, connectionState]);
+
+  // Create a new room
+  const createRoom = useCallback(() => {
+    connectAndDo('create');
+  }, [connectAndDo]);
+
+  // Join an existing room
+  const joinRoom = useCallback((code) => {
+    if (!code || code.length !== 4) {
+      setError('Invalid room code');
+      setConnectionState(ConnectionState.ERROR);
+      return;
+    }
+    connectAndDo({ type: 'join', code });
+  }, [connectAndDo]);
 
   // Disconnect
   const disconnect = useCallback(() => {
@@ -142,6 +181,7 @@ export function useWirelessGame(gameType, onMove, onState) {
     cleanup();
     setConnectionState(ConnectionState.DISCONNECTED);
     setPlayerNum(null);
+    setRoomCode(null);
     setError(null);
   }, [send, cleanup]);
 
@@ -163,12 +203,14 @@ export function useWirelessGame(gameType, onMove, onState) {
   return {
     connectionState,
     playerNum,
+    roomCode,
     error,
     isPlayer1: playerNum === 1,
     isPlayer2: playerNum === 2,
     isConnected: connectionState === ConnectionState.CONNECTED,
     isWaiting: connectionState === ConnectionState.WAITING,
-    connect,
+    createRoom,
+    joinRoom,
     disconnect,
     sendMove,
     sendState

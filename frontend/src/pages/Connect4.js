@@ -38,6 +38,7 @@ const Connect4 = () => {
   const [lastAiMove, setLastAiMove] = useState(null); // { row, col }
   const [replayingMove, setReplayingMove] = useState(false);
   const [animatingCell, setAnimatingCell] = useState(null); // { row, col }
+  const [lastMove, setLastMove] = useState(null); // { row, col, player } - tracks opponent's last move
   const aiTimeoutRef = useRef(null);
 
   // Wireless state
@@ -53,6 +54,7 @@ const Connect4 = () => {
     setWinningCells([]);
     setLastAiMove(null);
     setAnimatingCell(null);
+    setLastMove(null);
   }, [boardSize, createEmptyBoard]);
 
   const checkWinner = useCallback((board) => {
@@ -118,6 +120,9 @@ const Connect4 = () => {
     newBoard[row][col] = player;
     setBoard(newBoard);
 
+    // Track last move for opponent indicator
+    setLastMove({ row, col, player });
+
     // Track AI moves for replay
     if (isAiMove) {
       setLastAiMove({ row, col });
@@ -156,7 +161,7 @@ const Connect4 = () => {
     if (state.winningCells) setWinningCells(state.winningCells);
   }, []);
 
-  const { connectionState, playerNum, error, connect, disconnect, sendMove, sendState } =
+  const { connectionState, playerNum, roomCode, error, createRoom, joinRoom, disconnect, sendMove, sendState } =
     useWirelessGame('connect4', handleWirelessMove, handleWirelessState);
 
   // Update wirelessMoveRef with the actual move handler
@@ -188,8 +193,12 @@ const Connect4 = () => {
     }
   }, [connectionState, playerNum, sendState]);
 
-  const handleConnect = () => {
-    connect();
+  const handleCreateRoom = () => {
+    createRoom();
+  };
+
+  const handleJoinRoom = (code) => {
+    joinRoom(code);
   };
 
   const handleDisconnect = () => {
@@ -423,6 +432,7 @@ const Connect4 = () => {
     setLastAiMove(null);
     setAnimatingCell(null);
     setReplayingMove(false);
+    setLastMove(null);
     if (aiTimeoutRef.current) {
       clearTimeout(aiTimeoutRef.current);
     }
@@ -579,6 +589,12 @@ const Connect4 = () => {
           {board.map((row, rowIndex) =>
             row.map((cell, colIndex) => {
               const isAnimating = animatingCell?.row === rowIndex && animatingCell?.col === colIndex;
+              // Show indicator for opponent's last move (when it's not their color's turn)
+              const isOpponentLastMove = lastMove &&
+                lastMove.row === rowIndex &&
+                lastMove.col === colIndex &&
+                lastMove.player !== currentPlayer &&
+                !winner;
               return (
                 <div
                   key={`${rowIndex}-${colIndex}`}
@@ -594,7 +610,9 @@ const Connect4 = () => {
                       transition={{ type: 'spring', stiffness: 300, damping: 20, duration: 0.5 }}
                       className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${
                         cell === PLAYER_1 ? 'bg-red-500' : 'bg-yellow-400'
-                      } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''}`}
+                      } ${isWinningCell(rowIndex, colIndex) ? 'ring-4 ring-white animate-pulse' : ''} ${
+                        isOpponentLastMove ? 'ring-4 ring-white/60' : ''
+                      }`}
                     />
                   )}
                 </div>
@@ -639,8 +657,10 @@ const Connect4 = () => {
         onClose={() => setShowWirelessModal(false)}
         connectionState={connectionState}
         playerNum={playerNum}
+        roomCode={roomCode}
         error={error}
-        onConnect={handleConnect}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
         onDisconnect={handleDisconnect}
         gameName="Connect 4"
       />

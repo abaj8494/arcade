@@ -17,6 +17,10 @@ router.get('/hashiwokakero/generate', gameController.generateHashiPuzzle);
 router.get('/minesweeper/leaderboard', gameController.getMinesweeperLeaderboard);
 router.post('/minesweeper/leaderboard', gameController.addMinesweeperScore);
 
+// Bubble Burst leaderboard endpoints
+router.get('/bubble-burst/leaderboard', gameController.getBubbleBurstLeaderboard);
+router.post('/bubble-burst/leaderboard', gameController.addBubbleBurstScore);
+
 // Other game endpoints will be added later
 
 module.exports = router; 

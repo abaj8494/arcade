@@ -293,7 +293,8 @@ const Minesweeper = () => {
       setPendingScore({ difficulty, time: timer });
       setShowNamePrompt(true);
     }
-  }, [gameState, difficulty, timer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState]); // Only trigger on gameState change, capture difficulty/time at win moment
 
   // Submit score to leaderboard
   const submitScore = async () => {

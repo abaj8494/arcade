@@ -1,40 +1,48 @@
 /**
- * Simplified WebSocket handler for wireless 2-player games
- * Auto-matches players - no room codes needed
+ * WebSocket handler for wireless 2-player games
+ * Supports multiple rooms with 4-digit pin codes
  */
 
 const WebSocket = require('ws');
 
-// Waiting player (first to connect)
-let waitingPlayer = null;
-// Active game session
-let activeGame = null;
-let cleanupTimer = null;
+// Map of room codes to room data
+const rooms = new Map();
 
-const GAME_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const ROOM_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-// Clean up game
-function cleanupGame() {
-  if (activeGame) {
-    if (activeGame.player1?.readyState === WebSocket.OPEN) {
-      activeGame.player1.close();
-    }
-    if (activeGame.player2?.readyState === WebSocket.OPEN) {
-      activeGame.player2.close();
-    }
-    activeGame = null;
-  }
-  waitingPlayer = null;
-  if (cleanupTimer) {
-    clearTimeout(cleanupTimer);
-    cleanupTimer = null;
-  }
+// Generate a random 4-digit room code
+function generateRoomCode() {
+  let code;
+  do {
+    code = Math.floor(1000 + Math.random() * 9000).toString();
+  } while (rooms.has(code));
+  return code;
 }
 
-// Reset cleanup timer
-function resetCleanupTimer() {
-  if (cleanupTimer) clearTimeout(cleanupTimer);
-  cleanupTimer = setTimeout(cleanupGame, GAME_TIMEOUT);
+// Clean up a specific room
+function cleanupRoom(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  if (room.player1?.readyState === WebSocket.OPEN) {
+    room.player1.close();
+  }
+  if (room.player2?.readyState === WebSocket.OPEN) {
+    room.player2.close();
+  }
+  if (room.cleanupTimer) {
+    clearTimeout(room.cleanupTimer);
+  }
+  rooms.delete(roomCode);
+}
+
+// Reset cleanup timer for a room
+function resetRoomTimer(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
+  room.cleanupTimer = setTimeout(() => cleanupRoom(roomCode), ROOM_TIMEOUT);
 }
 
 // Send JSON message
@@ -44,11 +52,13 @@ function send(ws, type, data = {}) {
   }
 }
 
-// Get opponent
+// Get opponent in a room
 function getOpponent(ws) {
-  if (!activeGame) return null;
-  if (activeGame.player1 === ws) return activeGame.player2;
-  if (activeGame.player2 === ws) return activeGame.player1;
+  if (!ws.roomCode) return null;
+  const room = rooms.get(ws.roomCode);
+  if (!room) return null;
+  if (room.player1 === ws) return room.player2;
+  if (room.player2 === ws) return room.player1;
   return null;
 }
 
@@ -58,39 +68,69 @@ function handleMessage(ws, message) {
   try {
     msg = JSON.parse(message);
   } catch (e) {
+    console.error('WebSocket: Failed to parse message:', message);
     return;
   }
 
-  resetCleanupTimer();
+  if (ws.roomCode) {
+    resetRoomTimer(ws.roomCode);
+  }
 
   switch (msg.type) {
+    case 'create': {
+      // Create a new room
+      const roomCode = generateRoomCode();
+      const room = {
+        player1: ws,
+        player2: null,
+        gameType: msg.gameType || 'unknown',
+        cleanupTimer: null
+      };
+      rooms.set(roomCode, room);
+      ws.roomCode = roomCode;
+      ws.playerNum = 1;
+
+      resetRoomTimer(roomCode);
+      send(ws, 'roomCreated', { roomCode });
+      break;
+    }
+
     case 'join': {
-      // If there's an active game, reject
-      if (activeGame && activeGame.player1 && activeGame.player2) {
-        send(ws, 'error', { message: 'Game in progress' });
+      const roomCode = msg.roomCode;
+      const joiningGameType = msg.gameType;
+
+      if (!roomCode) {
+        send(ws, 'error', { message: 'Room code required' });
         return;
       }
 
-      // If someone is waiting, match them
-      if (waitingPlayer && waitingPlayer.readyState === WebSocket.OPEN) {
-        activeGame = {
-          player1: waitingPlayer,
-          player2: ws,
-          gameType: msg.gameType || 'unknown'
-        };
-        waitingPlayer.playerNum = 1;
-        ws.playerNum = 2;
-        waitingPlayer = null;
+      const room = rooms.get(roomCode);
 
-        // Notify both players
-        send(activeGame.player1, 'connected', { playerNum: 1 });
-        send(activeGame.player2, 'connected', { playerNum: 2 });
-      } else {
-        // First player - wait for opponent
-        waitingPlayer = ws;
-        ws.gameType = msg.gameType;
-        send(ws, 'waiting', {});
+      if (!room) {
+        send(ws, 'error', { message: 'Room not found' });
+        return;
       }
+
+      if (room.player2) {
+        send(ws, 'error', { message: 'Room is full' });
+        return;
+      }
+
+      // Validate game type matches
+      if (joiningGameType && room.gameType && joiningGameType !== room.gameType) {
+        send(ws, 'error', { message: `Wrong game. This room is for ${room.gameType}` });
+        return;
+      }
+
+      // Join as player 2
+      room.player2 = ws;
+      ws.roomCode = roomCode;
+      ws.playerNum = 2;
+      ws.gameType = joiningGameType;
+
+      // Notify both players
+      send(room.player1, 'connected', { playerNum: 1, roomCode, gameType: room.gameType });
+      send(room.player2, 'connected', { playerNum: 2, roomCode, gameType: room.gameType });
       break;
     }
 
@@ -124,23 +164,22 @@ function handleMessage(ws, message) {
 
 // Handle disconnect
 function handleDisconnect(ws) {
-  // If waiting player disconnects
-  if (waitingPlayer === ws) {
-    waitingPlayer = null;
-    return;
-  }
+  if (!ws.roomCode) return;
 
-  if (!activeGame) return;
+  const roomCode = ws.roomCode;
+  const room = rooms.get(roomCode);
+  if (!room) return;
 
   const opponent = getOpponent(ws);
 
   // Notify opponent
   if (opponent) {
     send(opponent, 'opponentLeft', {});
+    opponent.roomCode = null;
   }
 
-  // Clean up game
-  activeGame = null;
+  // Clean up room
+  cleanupRoom(roomCode);
 }
 
 // Initialize WebSocket server
@@ -165,7 +204,9 @@ function initWebSocket(server) {
 
   wss.on('close', () => {
     clearInterval(pingInterval);
-    cleanupGame();
+    for (const roomCode of rooms.keys()) {
+      cleanupRoom(roomCode);
+    }
   });
 
   wss.on('connection', (ws) => {
@@ -188,7 +229,7 @@ function initWebSocket(server) {
     });
   });
 
-  console.log('WebSocket server initialized on /ws');
+  console.log('WebSocket server initialized on /ws (with room support)');
   return wss;
 }
 

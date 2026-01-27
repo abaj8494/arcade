@@ -12,9 +12,10 @@ const PIECES = {
   bP: 7, bN: 8, bB: 9, bR: 10, bQ: 11, bK: 12
 };
 
+// Use filled piece symbols for both colors (solid pieces)
 const PIECE_SYMBOLS = {
-  [PIECES.wP]: '♙', [PIECES.wN]: '♘', [PIECES.wB]: '♗',
-  [PIECES.wR]: '♖', [PIECES.wQ]: '♕', [PIECES.wK]: '♔',
+  [PIECES.wP]: '♟', [PIECES.wN]: '♞', [PIECES.wB]: '♝',
+  [PIECES.wR]: '♜', [PIECES.wQ]: '♛', [PIECES.wK]: '♚',
   [PIECES.bP]: '♟', [PIECES.bN]: '♞', [PIECES.bB]: '♝',
   [PIECES.bR]: '♜', [PIECES.bQ]: '♛', [PIECES.bK]: '♚',
 };
@@ -491,8 +492,16 @@ const Chess = () => {
     if (state.gameOver !== undefined) setGameOver(state.gameOver);
   }, []);
 
-  const { connectionState, playerNum, error, connect, disconnect, sendMove, sendState } =
+  const { connectionState, playerNum, roomCode, error, createRoom, joinRoom, disconnect, sendMove, sendState } =
     useWirelessGame('chess', handleWirelessMove, handleWirelessState);
+
+  // Determine if board should be flipped (black at bottom)
+  // In wireless mode: flip when playing as black
+  // In 2-player local mode: flip when it's black's turn
+  // In AI mode: never flip (player is always white)
+  const flipBoard = gameMode === 'ai' ? false :
+    (connectionState === 'connected' && myColour) ? myColour === 'black' :
+    currentPlayer === 'black';
 
   // Update wirelessMoveRef with the actual move handler
   useEffect(() => {
@@ -522,8 +531,12 @@ const Chess = () => {
     }
   }, [connectionState, playerNum, sendState]);
 
-  const handleConnect = () => {
-    connect();
+  const handleCreateRoom = () => {
+    createRoom();
+  };
+
+  const handleJoinRoom = (code) => {
+    joinRoom(code);
   };
 
   const handleDisconnect = () => {
@@ -881,33 +894,37 @@ const Chess = () => {
         {/* Board - centered */}
         <div className="relative mx-4">
           <div className="grid grid-cols-8 border-4 border-amber-900 rounded">
-            {board.map((row, rowIndex) =>
-              row.map((piece, colIndex) => (
-                <div
-                  key={`${rowIndex}-${colIndex}`}
-                  className={getSquareClass(rowIndex, colIndex)}
-                  onClick={() => handleSquareClick(rowIndex, colIndex)}
-                >
-                  {piece !== 0 && (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className={isWhite(piece) ? 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-gray-900'}
-                      style={{ textShadow: isWhite(piece) ? '0 0 3px #000' : 'none' }}
-                    >
-                      {PIECE_SYMBOLS[piece]}
-                    </motion.span>
-                  )}
+            {(flipBoard ? [...board].reverse() : board).map((row, displayRowIndex) => {
+              const actualRowIndex = flipBoard ? 7 - displayRowIndex : displayRowIndex;
+              return (flipBoard ? [...row].reverse() : row).map((piece, displayColIndex) => {
+                const actualColIndex = flipBoard ? 7 - displayColIndex : displayColIndex;
+                return (
+                  <div
+                    key={`${actualRowIndex}-${actualColIndex}`}
+                    className={getSquareClass(actualRowIndex, actualColIndex)}
+                    onClick={() => handleSquareClick(actualRowIndex, actualColIndex)}
+                  >
+                    {piece !== 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className={isWhite(piece) ? 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-gray-900'}
+                        style={{ textShadow: isWhite(piece) ? '0 0 3px #000' : 'none' }}
+                      >
+                        {PIECE_SYMBOLS[piece]}
+                      </motion.span>
+                    )}
 
-                  {/* Valid move indicator */}
-                  {showMoveHints && validMoves.some(m => m[0] === rowIndex && m[1] === colIndex) && (
-                    <div className={`absolute w-3 h-3 rounded-full ${
-                      board[rowIndex][colIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
-                    }`} />
-                  )}
-                </div>
-              ))
-            )}
+                    {/* Valid move indicator */}
+                    {showMoveHints && validMoves.some(m => m[0] === actualRowIndex && m[1] === actualColIndex) && (
+                      <div className={`absolute w-3 h-3 rounded-full ${
+                        board[actualRowIndex][actualColIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
+                      }`} />
+                    )}
+                  </div>
+                );
+              });
+            })}
           </div>
 
           {/* Promotion dialog */}
@@ -934,7 +951,7 @@ const Chess = () => {
 
           {/* File labels */}
           <div className="flex mt-1">
-            {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(f => (
+            {(flipBoard ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']).map(f => (
               <div key={f} className="w-10 sm:w-14 text-center text-gray-400 text-sm">{f}</div>
             ))}
           </div>
@@ -996,8 +1013,10 @@ const Chess = () => {
         onClose={() => setShowWirelessModal(false)}
         connectionState={connectionState}
         playerNum={playerNum}
+        roomCode={roomCode}
         error={error}
-        onConnect={handleConnect}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
         onDisconnect={handleDisconnect}
         gameName="Chess"
       />
