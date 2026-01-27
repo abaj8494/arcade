@@ -6,6 +6,8 @@ const fs = require('fs');
 // Persistent storage path for leaderboards
 const LEADERBOARD_FILE = path.join(__dirname, '../../../data/minesweeper-leaderboard.json');
 const BUBBLE_BURST_LEADERBOARD_FILE = path.join(__dirname, '../../../data/bubble-burst-leaderboard.json');
+const SNAKE_LEADERBOARD_FILE = path.join(__dirname, '../../../data/snake-leaderboard.json');
+const TETRIS_LEADERBOARD_FILE = path.join(__dirname, '../../../data/tetris-leaderboard.json');
 
 // List of available games (alphabetically sorted)
 const games = [
@@ -276,6 +278,152 @@ exports.addBubbleBurstScore = (req, res) => {
     });
   } catch (err) {
     console.error('Error adding Bubble Burst score:', err);
+    res.status(500).json({ error: 'Failed to add score' });
+  }
+};
+
+// Helper to ensure Snake leaderboard file exists
+const ensureSnakeLeaderboardFile = () => {
+  const dataDir = path.dirname(SNAKE_LEADERBOARD_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(SNAKE_LEADERBOARD_FILE)) {
+    fs.writeFileSync(SNAKE_LEADERBOARD_FILE, JSON.stringify({
+      classic: []
+    }, null, 2));
+  }
+};
+
+// Get Snake leaderboard
+exports.getSnakeLeaderboard = (req, res) => {
+  try {
+    ensureSnakeLeaderboardFile();
+    const data = fs.readFileSync(SNAKE_LEADERBOARD_FILE, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    console.error('Error reading Snake leaderboard:', err);
+    res.status(500).json({ error: 'Failed to read leaderboard' });
+  }
+};
+
+// Add score to Snake leaderboard
+exports.addSnakeScore = (req, res) => {
+  try {
+    const { name, difficulty, score } = req.body;
+
+    // Validate input
+    if (!name || !difficulty || typeof score !== 'number') {
+      return res.status(400).json({ error: 'Missing required fields: name, difficulty, score' });
+    }
+
+    if (!['classic'].includes(difficulty)) {
+      return res.status(400).json({ error: 'Invalid difficulty level' });
+    }
+
+    // Sanitize name
+    const sanitizedName = name.slice(0, 20).replace(/[<>]/g, '');
+
+    ensureSnakeLeaderboardFile();
+    const data = JSON.parse(fs.readFileSync(SNAKE_LEADERBOARD_FILE, 'utf8'));
+
+    // Add new score
+    data[difficulty].push({
+      name: sanitizedName,
+      score: Math.floor(score),
+      date: new Date().toISOString()
+    });
+
+    // Sort by score (descending) and keep top 10
+    data[difficulty].sort((a, b) => b.score - a.score);
+    data[difficulty] = data[difficulty].slice(0, 10);
+
+    // Write back to file
+    fs.writeFileSync(SNAKE_LEADERBOARD_FILE, JSON.stringify(data, null, 2));
+
+    // Return the rank
+    const rank = data[difficulty].findIndex(s => s.name === sanitizedName && s.score === Math.floor(score));
+
+    res.json({
+      success: true,
+      rank: rank !== -1 ? rank + 1 : null,
+      leaderboard: data
+    });
+  } catch (err) {
+    console.error('Error adding Snake score:', err);
+    res.status(500).json({ error: 'Failed to add score' });
+  }
+};
+
+// Helper to ensure Tetris leaderboard file exists
+const ensureTetrisLeaderboardFile = () => {
+  const dataDir = path.dirname(TETRIS_LEADERBOARD_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(TETRIS_LEADERBOARD_FILE)) {
+    fs.writeFileSync(TETRIS_LEADERBOARD_FILE, JSON.stringify({
+      classic: []
+    }, null, 2));
+  }
+};
+
+// Get Tetris leaderboard
+exports.getTetrisLeaderboard = (req, res) => {
+  try {
+    ensureTetrisLeaderboardFile();
+    const data = fs.readFileSync(TETRIS_LEADERBOARD_FILE, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    console.error('Error reading Tetris leaderboard:', err);
+    res.status(500).json({ error: 'Failed to read leaderboard' });
+  }
+};
+
+// Add score to Tetris leaderboard
+exports.addTetrisScore = (req, res) => {
+  try {
+    const { name, difficulty, score } = req.body;
+
+    // Validate input
+    if (!name || !difficulty || typeof score !== 'number') {
+      return res.status(400).json({ error: 'Missing required fields: name, difficulty, score' });
+    }
+
+    if (!['classic'].includes(difficulty)) {
+      return res.status(400).json({ error: 'Invalid difficulty level' });
+    }
+
+    // Sanitize name
+    const sanitizedName = name.slice(0, 20).replace(/[<>]/g, '');
+
+    ensureTetrisLeaderboardFile();
+    const data = JSON.parse(fs.readFileSync(TETRIS_LEADERBOARD_FILE, 'utf8'));
+
+    // Add new score
+    data[difficulty].push({
+      name: sanitizedName,
+      score: Math.floor(score),
+      date: new Date().toISOString()
+    });
+
+    // Sort by score (descending) and keep top 10
+    data[difficulty].sort((a, b) => b.score - a.score);
+    data[difficulty] = data[difficulty].slice(0, 10);
+
+    // Write back to file
+    fs.writeFileSync(TETRIS_LEADERBOARD_FILE, JSON.stringify(data, null, 2));
+
+    // Return the rank
+    const rank = data[difficulty].findIndex(s => s.name === sanitizedName && s.score === Math.floor(score));
+
+    res.json({
+      success: true,
+      rank: rank !== -1 ? rank + 1 : null,
+      leaderboard: data
+    });
+  } catch (err) {
+    console.error('Error adding Tetris score:', err);
     res.status(500).json({ error: 'Failed to add score' });
   }
 };

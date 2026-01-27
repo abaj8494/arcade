@@ -21,6 +21,14 @@ router.post('/minesweeper/leaderboard', gameController.addMinesweeperScore);
 router.get('/bubble-burst/leaderboard', gameController.getBubbleBurstLeaderboard);
 router.post('/bubble-burst/leaderboard', gameController.addBubbleBurstScore);
 
+// Snake leaderboard endpoints
+router.get('/snake/leaderboard', gameController.getSnakeLeaderboard);
+router.post('/snake/leaderboard', gameController.addSnakeScore);
+
+// Tetris leaderboard endpoints
+router.get('/tetris/leaderboard', gameController.getTetrisLeaderboard);
+router.post('/tetris/leaderboard', gameController.addTetrisScore);
+
 // Other game endpoints will be added later
 
 module.exports = router; 
