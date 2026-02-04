@@ -131,6 +131,12 @@ const Chess = () => {
   const { showHelp, toggleHelp } = useHelpVisibility();
   const notationRef = useRef(null);
 
+  // Pre-move state (max 20 queued moves)
+  const MAX_PREMOVES = 20;
+  const [preMoves, setPreMoves] = useState([]);
+  const [preMovesEnabled, setPreMovesEnabled] = useState(true);
+  const [preMoveSelection, setPreMoveSelection] = useState(null);
+
   // Wireless state
   const [showWirelessModal, setShowWirelessModal] = useState(false);
   const [myColour, setMyColour] = useState(null);
@@ -530,7 +536,7 @@ const Chess = () => {
         });
       }
     }
-  }, [connectionState, playerNum, sendState]);
+  }, [connectionState, playerNum, sendState, resetGame]);
 
   const handleCreateRoom = () => {
     createRoom();
@@ -546,45 +552,122 @@ const Chess = () => {
     resetGame();
   };
 
+  // Determine if it's the player's turn (for pre-move logic)
+  const getMyColor = useCallback(() => {
+    if (gameMode === 'ai') return playerColor;
+    if (connectionState === 'connected' && myColour) return myColour;
+    return currentPlayer; // In local 2-player, current player is always "my" turn
+  }, [gameMode, playerColor, connectionState, myColour, currentPlayer]);
+
+  const isMyTurn = useCallback(() => {
+    const myColor = getMyColor();
+    return myColor === currentPlayer;
+  }, [getMyColor, currentPlayer]);
+
+  // Check if pre-moves should be allowed (AI mode or wireless mode, not local 2-player)
+  const canUsePremoves = gameMode === 'ai' || (connectionState === 'connected' && myColour);
+
+  // Clear pre-moves
+  const clearPreMoves = useCallback(() => {
+    setPreMoves([]);
+    setPreMoveSelection(null);
+  }, []);
+
   // Handle square click
   const handleSquareClick = (row, col) => {
-    if (gameOver || isAiThinking || promotionSquare) return;
-    const aiColor = playerColor === 'white' ? 'black' : 'white';
-    if (gameMode === 'ai' && currentPlayer === aiColor) return;
+    if (gameOver || promotionSquare) return;
 
-    // Check if it's our turn in wireless mode
-    if (connectionState === 'connected' && myColour) {
-      const isMyTurn = (myColour === 'white' && currentPlayer === 'white') ||
-                       (myColour === 'black' && currentPlayer === 'black');
-      if (!isMyTurn) return;
-    }
-
-    const piece = board[row][col];
-    const isCurrentPlayerPiece = piece && (
-      (currentPlayer === 'white' && isWhite(piece)) ||
-      (currentPlayer === 'black' && isBlack(piece))
+    const myColor = getMyColor();
+    const isMyPiece = (piece) => piece && (
+      (myColor === 'white' && isWhite(piece)) ||
+      (myColor === 'black' && isBlack(piece))
     );
 
-    if (selectedSquare) {
-      const [fromRow, fromCol] = selectedSquare;
-      const move = validMoves.find(m => m[0] === row && m[1] === col);
+    // If it's my turn, handle normal moves
+    if (isMyTurn() && !isAiThinking) {
+      // Clear pre-move selection when it becomes our turn
+      setPreMoveSelection(null);
 
-      if (move) {
-        const moveSuccess = makeMove(fromRow, fromCol, row, col, move[2]);
-        // Send move over wireless
-        if (moveSuccess && connectionState === 'connected') {
-          sendMove({ fromRow, fromCol, toRow: row, toCol: col, special: move[2] });
+      const piece = board[row][col];
+      const isCurrentPlayerPiece = piece && (
+        (currentPlayer === 'white' && isWhite(piece)) ||
+        (currentPlayer === 'black' && isBlack(piece))
+      );
+
+      if (selectedSquare) {
+        const [fromRow, fromCol] = selectedSquare;
+        const move = validMoves.find(m => m[0] === row && m[1] === col);
+
+        if (move) {
+          const moveSuccess = makeMove(fromRow, fromCol, row, col, move[2]);
+          // Send move over wireless
+          if (moveSuccess && connectionState === 'connected') {
+            sendMove({ fromRow, fromCol, toRow: row, toCol: col, special: move[2] });
+          }
+          return;
         }
-        return;
       }
+
+      if (isCurrentPlayerPiece) {
+        setSelectedSquare([row, col]);
+        setValidMoves(getLegalMoves(board, row, col, castlingRights, enPassantSquare));
+      } else {
+        setSelectedSquare(null);
+        setValidMoves([]);
+      }
+      return;
     }
 
-    if (isCurrentPlayerPiece) {
-      setSelectedSquare([row, col]);
-      setValidMoves(getLegalMoves(board, row, col, castlingRights, enPassantSquare));
-    } else {
-      setSelectedSquare(null);
-      setValidMoves([]);
+    // Not my turn - handle pre-moves if enabled
+    if (!preMovesEnabled || !canUsePremoves) return;
+    if (preMoves.length >= MAX_PREMOVES) return;
+
+    const piece = board[row][col];
+
+    // If we have a pre-move selection, try to complete the pre-move
+    if (preMoveSelection) {
+      const [fromRow, fromCol] = preMoveSelection;
+      const fromPiece = board[fromRow][fromCol];
+
+      // Don't allow moving to same square
+      if (fromRow === row && fromCol === col) {
+        setPreMoveSelection(null);
+        return;
+      }
+
+      // Add the pre-move (we'll validate it when executed)
+      // For now, just check it's a plausible move shape for the piece
+      const isValidPreMoveShape = () => {
+        if (!fromPiece) return false;
+        const dr = Math.abs(row - fromRow);
+        const dc = Math.abs(col - fromCol);
+
+        if (isPawn(fromPiece)) {
+          const dir = myColor === 'white' ? -1 : 1;
+          // Forward moves
+          if (col === fromCol && (row === fromRow + dir || (row === fromRow + 2 * dir))) return true;
+          // Diagonal captures
+          if (dc === 1 && row === fromRow + dir) return true;
+          return false;
+        }
+        if (isKnight(fromPiece)) return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
+        if (isBishop(fromPiece)) return dr === dc;
+        if (isRook(fromPiece)) return dr === 0 || dc === 0;
+        if (isQueen(fromPiece)) return dr === dc || dr === 0 || dc === 0;
+        if (isKing(fromPiece)) return (dr <= 1 && dc <= 1) || (dr === 0 && dc === 2); // Include castling
+        return false;
+      };
+
+      if (isValidPreMoveShape()) {
+        setPreMoves(prev => [...prev, { from: [fromRow, fromCol], to: [row, col] }]);
+      }
+      setPreMoveSelection(null);
+      return;
+    }
+
+    // Start a new pre-move selection if clicking on my piece
+    if (isMyPiece(piece)) {
+      setPreMoveSelection([row, col]);
     }
   };
 
@@ -742,6 +825,36 @@ const Chess = () => {
     return bestMove;
   }, [board, aiDifficulty, castlingRights, enPassantSquare, getLegalMoves, minimax]);
 
+  // Execute pre-moves when it becomes player's turn
+  useEffect(() => {
+    if (!isMyTurn() || preMoves.length === 0 || gameOver || promotionSquare || isAiThinking) return;
+
+    // Small delay to let the UI update before executing pre-move
+    const timeout = setTimeout(() => {
+      const [preMove, ...remainingMoves] = preMoves;
+      const { from, to } = preMove;
+      const [fromRow, fromCol] = from;
+      const [toRow, toCol] = to;
+
+      // Check if the pre-move is legal
+      const legalMoves = getLegalMoves(board, fromRow, fromCol, castlingRights, enPassantSquare);
+      const matchingMove = legalMoves.find(m => m[0] === toRow && m[1] === toCol);
+
+      if (matchingMove) {
+        const moveSuccess = makeMove(fromRow, fromCol, toRow, toCol, matchingMove[2]);
+        if (moveSuccess && connectionState === 'connected') {
+          sendMove({ fromRow, fromCol, toRow, toCol, special: matchingMove[2] });
+        }
+        setPreMoves(remainingMoves);
+      } else {
+        // Pre-move is no longer legal, clear all pre-moves
+        clearPreMoves();
+      }
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [isMyTurn, preMoves, gameOver, promotionSquare, isAiThinking, board, castlingRights, enPassantSquare, getLegalMoves, makeMove, connectionState, sendMove, clearPreMoves]);
+
   // AI turn effect
   useEffect(() => {
     const aiColor = playerColor === 'white' ? 'black' : 'white';
@@ -761,7 +874,7 @@ const Chess = () => {
     };
   }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove, playerColor]);
 
-  const resetGame = () => {
+  const resetGame = useCallback(() => {
     setBoard(initialBoard());
     setCurrentPlayer('white');
     setSelectedSquare(null);
@@ -773,13 +886,28 @@ const Chess = () => {
     setPromotionSquare(null);
     setLastMove(null);
     setIsAiThinking(false);
+    setPreMoves([]);
+    setPreMoveSelection(null);
     if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+  }, []);
+
+  // Check if a square is part of a pre-move
+  const isPreMoveSquare = (row, col) => {
+    return preMoves.some(pm =>
+      (pm.from[0] === row && pm.from[1] === col) ||
+      (pm.to[0] === row && pm.to[1] === col)
+    );
+  };
+
+  const isPreMoveTo = (row, col) => {
+    return preMoves.some(pm => pm.to[0] === row && pm.to[1] === col);
   };
 
   const getSquareClass = (row, col) => {
     const isLight = (row + col) % 2 === 0;
     const isSelected = selectedSquare && selectedSquare[0] === row && selectedSquare[1] === col;
-    const isValidMove = validMoves.some(m => m[0] === row && m[1] === col);
+    const isPreMoveSelected = preMoveSelection && preMoveSelection[0] === row && preMoveSelection[1] === col;
+    const isPreMove = isPreMoveSquare(row, col);
     const isLastMoveSquare = lastMove && (
       (lastMove.from[0] === row && lastMove.from[1] === col) ||
       (lastMove.to[0] === row && lastMove.to[1] === col)
@@ -792,6 +920,10 @@ const Chess = () => {
       classes += 'bg-red-500 ';
     } else if (isSelected) {
       classes += 'bg-yellow-500 ';
+    } else if (isPreMoveSelected) {
+      classes += 'bg-cyan-500 ';
+    } else if (isPreMove) {
+      classes += isLight ? 'bg-cyan-200 ' : 'bg-cyan-600 ';
     } else if (isLastMoveSquare) {
       classes += isLight ? 'bg-yellow-200 ' : 'bg-yellow-600 ';
     } else {
@@ -951,6 +1083,11 @@ const Chess = () => {
                         board[actualRowIndex][actualColIndex] ? 'ring-4 ring-green-500 ring-opacity-50 w-full h-full' : 'bg-green-500 opacity-50'
                       }`} />
                     )}
+
+                    {/* Pre-move destination indicator */}
+                    {isPreMoveTo(actualRowIndex, actualColIndex) && (
+                      <div className="absolute w-3 h-3 rounded-full bg-cyan-400 opacity-70" />
+                    )}
                   </div>
                 );
               });
@@ -1027,6 +1164,31 @@ const Chess = () => {
           Notation {showNotation ? 'ON' : 'OFF'}
         </button>
       </div>
+
+      {/* Pre-move controls - only show in AI or wireless mode */}
+      {canUsePremoves && (
+        <div className="flex gap-4 mt-3 flex-wrap justify-center items-center">
+          <button
+            onClick={() => { setPreMovesEnabled(!preMovesEnabled); clearPreMoves(); }}
+            className={`btn text-sm ${preMovesEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+          >
+            Pre-moves {preMovesEnabled ? 'ON' : 'OFF'}
+          </button>
+          {preMoves.length > 0 && (
+            <>
+              <span className="text-cyan-400 text-sm">
+                {preMoves.length} queued
+              </span>
+              <button
+                onClick={clearPreMoves}
+                className="btn text-sm bg-red-600 hover:bg-red-500"
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Move count (shown on mobile where notation is hidden) */}
       <div className="mt-4 text-gray-400 sm:hidden">
