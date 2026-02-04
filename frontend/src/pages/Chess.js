@@ -518,6 +518,24 @@ const Chess = () => {
     };
   }, [makeMove]);
 
+  // Reset game function - defined early because it's used in multiple places
+  const resetGame = useCallback(() => {
+    setBoard(initialBoard());
+    setCurrentPlayer('white');
+    setSelectedSquare(null);
+    setValidMoves([]);
+    setGameOver(null);
+    setMoveHistory([]);
+    setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
+    setEnPassantSquare(null);
+    setPromotionSquare(null);
+    setLastMove(null);
+    setIsAiThinking(false);
+    setPreMoves([]);
+    setPreMoveSelection(null);
+    if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+  }, []);
+
   // Handle wireless connection - player 1 is white, player 2 is black
   useEffect(() => {
     if (connectionState === 'connected' && playerNum) {
@@ -873,23 +891,6 @@ const Chess = () => {
       if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
     };
   }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove, playerColor]);
-
-  const resetGame = useCallback(() => {
-    setBoard(initialBoard());
-    setCurrentPlayer('white');
-    setSelectedSquare(null);
-    setValidMoves([]);
-    setGameOver(null);
-    setMoveHistory([]);
-    setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
-    setEnPassantSquare(null);
-    setPromotionSquare(null);
-    setLastMove(null);
-    setIsAiThinking(false);
-    setPreMoves([]);
-    setPreMoveSelection(null);
-    if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
-  }, []);
 
   // Check if a square is part of a pre-move
   const isPreMoveSquare = (row, col) => {
