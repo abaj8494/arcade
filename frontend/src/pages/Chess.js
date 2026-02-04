@@ -498,11 +498,11 @@ const Chess = () => {
 
   // Determine if board should be flipped (black at bottom)
   // In wireless mode: flip when playing as black
-  // In 2-player local mode: flip when it's black's turn
+  // In 2-player local mode: never flip (white always at bottom)
   // In AI mode: flip when player chose to play as black
   const flipBoard = gameMode === 'ai' ? playerColor === 'black' :
     (connectionState === 'connected' && myColour) ? myColour === 'black' :
-    currentPlayer === 'black';
+    false;
 
   // Update wirelessMoveRef with the actual move handler
   useEffect(() => {
