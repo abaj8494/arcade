@@ -780,8 +780,22 @@ const Chess = () => {
   }, [evaluateBoard, getGameStatus, getLegalMoves]);
 
   const getAiMove = useCallback((aiIsWhite) => {
-    const depths = { easy: 2, medium: 3, hard: 4, expert: 5, master: 6 };
-    const depth = depths[aiDifficulty];
+    const baseDepths = { easy: 2, medium: 3, hard: 4, expert: 5, master: 3 };
+    let depth = baseDepths[aiDifficulty];
+
+    // Master difficulty: progressively increase depth as game progresses
+    // Opening (moves 1-8): depth 3, Middlegame (9-20): depth 4-5, Endgame (21+): depth 6
+    if (aiDifficulty === 'master') {
+      const moveNum = moveHistory.length;
+      if (moveNum >= 40) {
+        depth = 6;
+      } else if (moveNum >= 24) {
+        depth = 5;
+      } else if (moveNum >= 12) {
+        depth = 4;
+      }
+      // depth 3 for opening (moves 0-11)
+    }
 
     let bestMove = null;
     let bestScore = aiIsWhite ? Infinity : -Infinity;
@@ -823,7 +837,7 @@ const Chess = () => {
     }
 
     return bestMove;
-  }, [board, aiDifficulty, castlingRights, enPassantSquare, getLegalMoves, minimax]);
+  }, [board, aiDifficulty, castlingRights, enPassantSquare, getLegalMoves, minimax, moveHistory.length]);
 
   // Execute pre-moves when it becomes player's turn
   useEffect(() => {
@@ -842,10 +856,15 @@ const Chess = () => {
 
       if (matchingMove) {
         const moveSuccess = makeMove(fromRow, fromCol, toRow, toCol, matchingMove[2]);
-        if (moveSuccess && connectionState === 'connected') {
-          sendMove({ fromRow, fromCol, toRow, toCol, special: matchingMove[2] });
+        if (moveSuccess) {
+          if (connectionState === 'connected') {
+            sendMove({ fromRow, fromCol, toRow, toCol, special: matchingMove[2] });
+          }
+          setPreMoves(remainingMoves);
+        } else {
+          // Move didn't complete (e.g., needs promotion) - clear pre-moves
+          clearPreMoves();
         }
-        setPreMoves(remainingMoves);
       } else {
         // Pre-move is no longer legal, clear all pre-moves
         clearPreMoves();
@@ -855,23 +874,38 @@ const Chess = () => {
     return () => clearTimeout(timeout);
   }, [isMyTurn, preMoves, gameOver, promotionSquare, isAiThinking, board, castlingRights, enPassantSquare, getLegalMoves, makeMove, connectionState, sendMove, clearPreMoves]);
 
-  // AI turn effect
+  // AI turn effect - uses async calculation to allow UI updates and pre-moves
   useEffect(() => {
     const aiColor = playerColor === 'white' ? 'black' : 'white';
     if (gameMode === 'ai' && currentPlayer === aiColor && !gameOver && !promotionSquare) {
       setIsAiThinking(true);
-      aiTimeoutRef.current = setTimeout(() => {
-        const move = getAiMove(aiColor === 'white');
-        if (move) {
-          makeMove(move.from[0], move.from[1], move.to[0], move.to[1], move.special);
-        }
-        setIsAiThinking(false);
-      }, 500);
-    }
+      let cancelled = false;
 
-    return () => {
-      if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
-    };
+      // Small delay to allow UI to update and pre-moves to be queued
+      aiTimeoutRef.current = setTimeout(() => {
+        // Run AI calculation in next frame to prevent blocking
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+
+          // Use setTimeout(0) to yield to event loop before heavy calculation
+          setTimeout(() => {
+            if (cancelled) return;
+            const move = getAiMove(aiColor === 'white');
+            if (!cancelled && move) {
+              makeMove(move.from[0], move.from[1], move.to[0], move.to[1], move.special);
+            }
+            if (!cancelled) {
+              setIsAiThinking(false);
+            }
+          }, 0);
+        });
+      }, 300);
+
+      return () => {
+        cancelled = true;
+        if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+      };
+    }
   }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove, playerColor]);
 
   // Check if a square is part of a pre-move
