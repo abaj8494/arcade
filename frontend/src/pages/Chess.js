@@ -122,6 +122,7 @@ const Chess = () => {
   const [gameMode, setGameMode] = useState('2player');
   const [aiDifficulty, setAiDifficulty] = useState('medium');
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [playerColor, setPlayerColor] = useState('white');
   const [promotionSquare, setPromotionSquare] = useState(null);
   const [lastMove, setLastMove] = useState(null);
   const [showMoveHints, setShowMoveHints] = useState(true);
@@ -498,8 +499,8 @@ const Chess = () => {
   // Determine if board should be flipped (black at bottom)
   // In wireless mode: flip when playing as black
   // In 2-player local mode: flip when it's black's turn
-  // In AI mode: never flip (player is always white)
-  const flipBoard = gameMode === 'ai' ? false :
+  // In AI mode: flip when player chose to play as black
+  const flipBoard = gameMode === 'ai' ? playerColor === 'black' :
     (connectionState === 'connected' && myColour) ? myColour === 'black' :
     currentPlayer === 'black';
 
@@ -548,7 +549,8 @@ const Chess = () => {
   // Handle square click
   const handleSquareClick = (row, col) => {
     if (gameOver || isAiThinking || promotionSquare) return;
-    if (gameMode === 'ai' && currentPlayer === 'black') return;
+    const aiColor = playerColor === 'white' ? 'black' : 'white';
+    if (gameMode === 'ai' && currentPlayer === aiColor) return;
 
     // Check if it's our turn in wireless mode
     if (connectionState === 'connected' && myColour) {
@@ -694,17 +696,18 @@ const Chess = () => {
     }
   }, [evaluateBoard, getGameStatus, getLegalMoves]);
 
-  const getAiMove = useCallback(() => {
-    const depths = { easy: 2, medium: 3, hard: 4 };
+  const getAiMove = useCallback((aiIsWhite) => {
+    const depths = { easy: 2, medium: 3, hard: 4, expert: 5, master: 6 };
     const depth = depths[aiDifficulty];
 
     let bestMove = null;
-    let bestScore = -Infinity;
+    let bestScore = aiIsWhite ? Infinity : -Infinity;
+    const isAiPiece = aiIsWhite ? isWhite : isBlack;
 
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const piece = board[r][c];
-        if (piece && isBlack(piece)) {
+        if (piece && isAiPiece(piece)) {
           const moves = getLegalMoves(board, r, c, castlingRights, enPassantSquare);
           for (const move of moves) {
             const [nr, nc, special] = move;
@@ -717,10 +720,19 @@ const Chess = () => {
               else { newBoard[nr][3] = newBoard[nr][0]; newBoard[nr][0] = 0; }
             }
 
-            const score = minimax(newBoard, depth - 1, -Infinity, Infinity, false, castlingRights, null);
-            if (score > bestScore || (score === bestScore && Math.random() > 0.5)) {
-              bestScore = score;
-              bestMove = { from: [r, c], to: [nr, nc], special };
+            const score = minimax(newBoard, depth - 1, -Infinity, Infinity, !aiIsWhite, castlingRights, null);
+            if (aiIsWhite) {
+              // AI is white, minimize score (white wants negative scores from black's perspective)
+              if (score < bestScore || (score === bestScore && Math.random() > 0.5)) {
+                bestScore = score;
+                bestMove = { from: [r, c], to: [nr, nc], special };
+              }
+            } else {
+              // AI is black, maximize score
+              if (score > bestScore || (score === bestScore && Math.random() > 0.5)) {
+                bestScore = score;
+                bestMove = { from: [r, c], to: [nr, nc], special };
+              }
             }
           }
         }
@@ -732,10 +744,11 @@ const Chess = () => {
 
   // AI turn effect
   useEffect(() => {
-    if (gameMode === 'ai' && currentPlayer === 'black' && !gameOver && !promotionSquare) {
+    const aiColor = playerColor === 'white' ? 'black' : 'white';
+    if (gameMode === 'ai' && currentPlayer === aiColor && !gameOver && !promotionSquare) {
       setIsAiThinking(true);
       aiTimeoutRef.current = setTimeout(() => {
-        const move = getAiMove();
+        const move = getAiMove(aiColor === 'white');
         if (move) {
           makeMove(move.from[0], move.from[1], move.to[0], move.to[1], move.special);
         }
@@ -746,7 +759,7 @@ const Chess = () => {
     return () => {
       if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
     };
-  }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove]);
+  }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove, playerColor]);
 
   const resetGame = () => {
     setBoard(initialBoard());
@@ -861,16 +874,33 @@ const Chess = () => {
 
       {/* AI Difficulty */}
       {gameMode === 'ai' && (
-        <div className="mb-4 flex gap-2">
-          {['easy', 'medium', 'hard'].map((diff) => (
+        <div className="mb-4 flex flex-col gap-2 items-center">
+          <div className="flex gap-2">
+            {['easy', 'medium', 'hard', 'expert', 'master'].map((diff) => (
+              <button
+                key={diff}
+                onClick={() => { setAiDifficulty(diff); resetGame(); }}
+                className={`btn text-sm ${aiDifficulty === diff ? 'bg-purple-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              >
+                {diff.charAt(0).toUpperCase() + diff.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <span className="text-gray-400 text-sm">Play as:</span>
             <button
-              key={diff}
-              onClick={() => { setAiDifficulty(diff); resetGame(); }}
-              className={`btn text-sm ${aiDifficulty === diff ? 'bg-purple-600' : 'bg-gray-600 hover:bg-gray-500'}`}
+              onClick={() => { setPlayerColor('white'); resetGame(); }}
+              className={`btn text-sm ${playerColor === 'white' ? 'bg-white text-black' : 'bg-gray-600 hover:bg-gray-500'}`}
             >
-              {diff.charAt(0).toUpperCase() + diff.slice(1)}
+              White
             </button>
-          ))}
+            <button
+              onClick={() => { setPlayerColor('black'); resetGame(); }}
+              className={`btn text-sm ${playerColor === 'black' ? 'bg-gray-800 border border-white' : 'bg-gray-600 hover:bg-gray-500'}`}
+            >
+              Black
+            </button>
+          </div>
         </div>
       )}
 
