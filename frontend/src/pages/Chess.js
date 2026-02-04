@@ -645,40 +645,22 @@ const Chess = () => {
     // If we have a pre-move selection, try to complete the pre-move
     if (preMoveSelection) {
       const [fromRow, fromCol] = preMoveSelection;
-      const fromPiece = board[fromRow][fromCol];
 
-      // Don't allow moving to same square
+      // Clicking same square cancels the selection
       if (fromRow === row && fromCol === col) {
         setPreMoveSelection(null);
         return;
       }
 
-      // Add the pre-move (we'll validate it when executed)
-      // For now, just check it's a plausible move shape for the piece
-      const isValidPreMoveShape = () => {
-        if (!fromPiece) return false;
-        const dr = Math.abs(row - fromRow);
-        const dc = Math.abs(col - fromCol);
-
-        if (isPawn(fromPiece)) {
-          const dir = myColor === 'white' ? -1 : 1;
-          // Forward moves
-          if (col === fromCol && (row === fromRow + dir || (row === fromRow + 2 * dir))) return true;
-          // Diagonal captures
-          if (dc === 1 && row === fromRow + dir) return true;
-          return false;
-        }
-        if (isKnight(fromPiece)) return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
-        if (isBishop(fromPiece)) return dr === dc;
-        if (isRook(fromPiece)) return dr === 0 || dc === 0;
-        if (isQueen(fromPiece)) return dr === dc || dr === 0 || dc === 0;
-        if (isKing(fromPiece)) return (dr <= 1 && dc <= 1) || (dr === 0 && dc === 2); // Include castling
-        return false;
-      };
-
-      if (isValidPreMoveShape()) {
-        setPreMoves(prev => [...prev, { from: [fromRow, fromCol], to: [row, col] }]);
+      // Clicking on another of my pieces switches selection
+      if (isMyPiece(piece)) {
+        setPreMoveSelection([row, col]);
+        return;
       }
+
+      // Add the pre-move - we'll validate it when executed
+      // Don't add if clicking on own piece (already handled above)
+      setPreMoves(prev => [...prev, { from: [fromRow, fromCol], to: [row, col] }]);
       setPreMoveSelection(null);
       return;
     }
