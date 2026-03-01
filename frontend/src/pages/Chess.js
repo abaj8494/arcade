@@ -12,19 +12,29 @@ const PIECES = {
   bP: 7, bN: 8, bB: 9, bR: 10, bQ: 11, bK: 12
 };
 
-// Use filled piece symbols for both colors (solid pieces)
-const PIECE_SYMBOLS = {
-  [PIECES.wP]: '♟', [PIECES.wN]: '♞', [PIECES.wB]: '♝',
-  [PIECES.wR]: '♜', [PIECES.wQ]: '♛', [PIECES.wK]: '♚',
-  [PIECES.bP]: '♟', [PIECES.bN]: '♞', [PIECES.bB]: '♝',
-  [PIECES.bR]: '♜', [PIECES.bQ]: '♛', [PIECES.bK]: '♚',
+// Piece image paths (cburnett SVGs)
+const PIECE_IMAGES = {
+  [PIECES.wP]: '/images/chess-pieces/wP.svg',
+  [PIECES.wN]: '/images/chess-pieces/wN.svg',
+  [PIECES.wB]: '/images/chess-pieces/wB.svg',
+  [PIECES.wR]: '/images/chess-pieces/wR.svg',
+  [PIECES.wQ]: '/images/chess-pieces/wQ.svg',
+  [PIECES.wK]: '/images/chess-pieces/wK.svg',
+  [PIECES.bP]: '/images/chess-pieces/bP.svg',
+  [PIECES.bN]: '/images/chess-pieces/bN.svg',
+  [PIECES.bB]: '/images/chess-pieces/bB.svg',
+  [PIECES.bR]: '/images/chess-pieces/bR.svg',
+  [PIECES.bQ]: '/images/chess-pieces/bQ.svg',
+  [PIECES.bK]: '/images/chess-pieces/bK.svg',
 };
 
-const PIECE_VALUES = {
-  [PIECES.wP]: 100, [PIECES.wN]: 320, [PIECES.wB]: 330,
-  [PIECES.wR]: 500, [PIECES.wQ]: 900, [PIECES.wK]: 20000,
-  [PIECES.bP]: 100, [PIECES.bN]: 320, [PIECES.bB]: 330,
-  [PIECES.bR]: 500, [PIECES.bQ]: 900, [PIECES.bK]: 20000,
+// AI time limits per difficulty (each level adds 1 second)
+const AI_TIME_LIMITS = {
+  easy: 1000,
+  medium: 2000,
+  hard: 3000,
+  expert: 4000,
+  master: 5000,
 };
 
 // Piece letters for algebraic notation
@@ -128,8 +138,10 @@ const Chess = () => {
   const [showMoveHints, setShowMoveHints] = useState(true);
   const [showNotation, setShowNotation] = useState(true);
   const aiTimeoutRef = useRef(null);
+  const aiWorkerRef = useRef(null);
   const { showHelp, toggleHelp } = useHelpVisibility();
   const notationRef = useRef(null);
+  const [fenCopied, setFenCopied] = useState(false);
 
   // Pre-move state (max 20 queued moves)
   const MAX_PREMOVES = 20;
@@ -534,6 +546,7 @@ const Chess = () => {
     setPreMoves([]);
     setPreMoveSelection(null);
     if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+    if (aiWorkerRef.current) { aiWorkerRef.current.terminate(); aiWorkerRef.current = null; }
   }, []);
 
   // Handle wireless connection - player 1 is white, player 2 is black
@@ -687,157 +700,64 @@ const Chess = () => {
     }
   };
 
-  // AI move using minimax
-  const evaluateBoard = useCallback((board) => {
-    let score = 0;
+  // Generate FEN string from current position
+  const boardToFen = useCallback(() => {
+    const PIECE_FEN = {
+      [PIECES.wP]: 'P', [PIECES.wN]: 'N', [PIECES.wB]: 'B',
+      [PIECES.wR]: 'R', [PIECES.wQ]: 'Q', [PIECES.wK]: 'K',
+      [PIECES.bP]: 'p', [PIECES.bN]: 'n', [PIECES.bB]: 'b',
+      [PIECES.bR]: 'r', [PIECES.bQ]: 'q', [PIECES.bK]: 'k',
+    };
+
+    // Piece placement
+    const rows = [];
     for (let r = 0; r < 8; r++) {
+      let row = '';
+      let empty = 0;
       for (let c = 0; c < 8; c++) {
         const piece = board[r][c];
-        if (piece) {
-          const value = PIECE_VALUES[piece] || 0;
-          score += isWhite(piece) ? value : -value;
-
-          // Position bonuses
-          if (isPawn(piece)) {
-            const advance = isWhite(piece) ? (6 - r) : (r - 1);
-            score += isWhite(piece) ? advance * 10 : -advance * 10;
-          }
-          // Centre control bonus
-          if ((c === 3 || c === 4) && (r === 3 || r === 4)) {
-            score += isWhite(piece) ? 30 : -30;
-          }
+        if (piece === 0) {
+          empty++;
+        } else {
+          if (empty > 0) { row += empty; empty = 0; }
+          row += PIECE_FEN[piece] || '?';
         }
       }
-    }
-    return score;
-  }, []);
-
-  const minimax = useCallback((board, depth, alpha, beta, isMaximizing, castling, enPassant) => {
-    if (depth === 0) {
-      return evaluateBoard(board);
+      if (empty > 0) row += empty;
+      rows.push(row);
     }
 
-    const status = getGameStatus(board, isMaximizing, castling, enPassant);
-    if (status === 'white_wins') return -100000 + depth;
-    if (status === 'black_wins') return 100000 - depth;
-    if (status === 'stalemate') return 0;
+    // Active color
+    const active = currentPlayer === 'white' ? 'w' : 'b';
 
-    if (isMaximizing) {
-      let maxEval = -Infinity;
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = board[r][c];
-          if (piece && isBlack(piece)) {
-            const moves = getLegalMoves(board, r, c, castling, enPassant);
-            for (const move of moves) {
-              const [nr, nc, special] = move;
-              const newBoard = board.map(row => [...row]);
-              newBoard[nr][nc] = piece;
-              newBoard[r][c] = 0;
-              if (special === 'ep') newBoard[r][nc] = 0;
-              if (special === 'castle') {
-                if (nc === 6) { newBoard[nr][5] = newBoard[nr][7]; newBoard[nr][7] = 0; }
-                else { newBoard[nr][3] = newBoard[nr][0]; newBoard[nr][0] = 0; }
-              }
+    // Castling
+    let castling = '';
+    if (castlingRights.wK) castling += 'K';
+    if (castlingRights.wQ) castling += 'Q';
+    if (castlingRights.bK) castling += 'k';
+    if (castlingRights.bQ) castling += 'q';
+    if (!castling) castling = '-';
 
-              const evalScore = minimax(newBoard, depth - 1, alpha, beta, false, castling, null);
-              maxEval = Math.max(maxEval, evalScore);
-              alpha = Math.max(alpha, evalScore);
-              if (beta <= alpha) break;
-            }
-          }
-        }
-      }
-      return maxEval;
-    } else {
-      let minEval = Infinity;
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = board[r][c];
-          if (piece && isWhite(piece)) {
-            const moves = getLegalMoves(board, r, c, castling, enPassant);
-            for (const move of moves) {
-              const [nr, nc, special] = move;
-              const newBoard = board.map(row => [...row]);
-              newBoard[nr][nc] = piece;
-              newBoard[r][c] = 0;
-              if (special === 'ep') newBoard[r][nc] = 0;
-              if (special === 'castle') {
-                if (nc === 6) { newBoard[nr][5] = newBoard[nr][7]; newBoard[nr][7] = 0; }
-                else { newBoard[nr][3] = newBoard[nr][0]; newBoard[nr][0] = 0; }
-              }
-
-              const evalScore = minimax(newBoard, depth - 1, alpha, beta, true, castling, null);
-              minEval = Math.min(minEval, evalScore);
-              beta = Math.min(beta, evalScore);
-              if (beta <= alpha) break;
-            }
-          }
-        }
-      }
-      return minEval;
-    }
-  }, [evaluateBoard, getGameStatus, getLegalMoves]);
-
-  const getAiMove = useCallback((aiIsWhite) => {
-    const baseDepths = { easy: 2, medium: 3, hard: 4, expert: 5, master: 3 };
-    let depth = baseDepths[aiDifficulty];
-
-    // Master difficulty: progressively increase depth as game progresses
-    // Opening (moves 1-8): depth 3, Middlegame (9-20): depth 4-5, Endgame (21+): depth 6
-    if (aiDifficulty === 'master') {
-      const moveNum = moveHistory.length;
-      if (moveNum >= 40) {
-        depth = 6;
-      } else if (moveNum >= 24) {
-        depth = 5;
-      } else if (moveNum >= 12) {
-        depth = 4;
-      }
-      // depth 3 for opening (moves 0-11)
+    // En passant
+    let ep = '-';
+    if (enPassantSquare) {
+      ep = FILES[enPassantSquare[1]] + RANKS[enPassantSquare[0]];
     }
 
-    let bestMove = null;
-    let bestScore = aiIsWhite ? Infinity : -Infinity;
-    const isAiPiece = aiIsWhite ? isWhite : isBlack;
+    // Halfmove clock and fullmove number (approximate)
+    const fullmove = Math.floor(moveHistory.length / 2) + 1;
 
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = board[r][c];
-        if (piece && isAiPiece(piece)) {
-          const moves = getLegalMoves(board, r, c, castlingRights, enPassantSquare);
-          for (const move of moves) {
-            const [nr, nc, special] = move;
-            const newBoard = board.map(row => [...row]);
-            newBoard[nr][nc] = piece;
-            newBoard[r][c] = 0;
-            if (special === 'ep') newBoard[r][nc] = 0;
-            if (special === 'castle') {
-              if (nc === 6) { newBoard[nr][5] = newBoard[nr][7]; newBoard[nr][7] = 0; }
-              else { newBoard[nr][3] = newBoard[nr][0]; newBoard[nr][0] = 0; }
-            }
+    return `${rows.join('/')} ${active} ${castling} ${ep} 0 ${fullmove}`;
+  }, [board, currentPlayer, castlingRights, enPassantSquare, moveHistory.length]);
 
-            const score = minimax(newBoard, depth - 1, -Infinity, Infinity, !aiIsWhite, castlingRights, null);
-            if (aiIsWhite) {
-              // AI is white, minimize score (white wants negative scores from black's perspective)
-              if (score < bestScore || (score === bestScore && Math.random() > 0.5)) {
-                bestScore = score;
-                bestMove = { from: [r, c], to: [nr, nc], special };
-              }
-            } else {
-              // AI is black, maximize score
-              if (score > bestScore || (score === bestScore && Math.random() > 0.5)) {
-                bestScore = score;
-                bestMove = { from: [r, c], to: [nr, nc], special };
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return bestMove;
-  }, [board, aiDifficulty, castlingRights, enPassantSquare, getLegalMoves, minimax, moveHistory.length]);
+  // Copy FEN to clipboard
+  const copyFen = useCallback(() => {
+    const fen = boardToFen();
+    navigator.clipboard.writeText(fen).then(() => {
+      setFenCopied(true);
+      setTimeout(() => setFenCopied(false), 1500);
+    }).catch(() => {});
+  }, [boardToFen]);
 
   // Execute pre-moves when it becomes player's turn
   useEffect(() => {
@@ -874,7 +794,7 @@ const Chess = () => {
     return () => clearTimeout(timeout);
   }, [isMyTurn, preMoves, gameOver, promotionSquare, isAiThinking, board, castlingRights, enPassantSquare, getLegalMoves, makeMove, connectionState, sendMove, clearPreMoves]);
 
-  // AI turn effect - uses async calculation to allow UI updates and pre-moves
+  // AI turn effect - uses Web Worker for non-blocking computation
   useEffect(() => {
     const aiColor = playerColor === 'white' ? 'black' : 'white';
     if (gameMode === 'ai' && currentPlayer === aiColor && !gameOver && !promotionSquare) {
@@ -883,30 +803,47 @@ const Chess = () => {
 
       // Small delay to allow UI to update and pre-moves to be queued
       aiTimeoutRef.current = setTimeout(() => {
-        // Run AI calculation in next frame to prevent blocking
-        requestAnimationFrame(() => {
+        if (cancelled) return;
+
+        // Create or reuse Web Worker
+        if (!aiWorkerRef.current) {
+          aiWorkerRef.current = new Worker('/chess-worker.js');
+        }
+        const worker = aiWorkerRef.current;
+
+        const onMessage = (e) => {
+          worker.removeEventListener('message', onMessage);
           if (cancelled) return;
 
-          // Use setTimeout(0) to yield to event loop before heavy calculation
-          setTimeout(() => {
-            if (cancelled) return;
-            const move = getAiMove(aiColor === 'white');
-            if (!cancelled && move) {
-              makeMove(move.from[0], move.from[1], move.to[0], move.to[1], move.special);
-            }
-            if (!cancelled) {
-              setIsAiThinking(false);
-            }
-          }, 0);
+          const result = e.data;
+          if (result?.bestMove) {
+            const { bestMove } = result;
+            makeMove(bestMove.from[0], bestMove.from[1], bestMove.to[0], bestMove.to[1], bestMove.special);
+          }
+          setIsAiThinking(false);
+        };
+
+        worker.addEventListener('message', onMessage);
+        worker.postMessage({
+          board,
+          castlingRights,
+          enPassantSquare,
+          aiIsWhite: aiColor === 'white',
+          timeLimitMs: AI_TIME_LIMITS[aiDifficulty] || 2000,
         });
-      }, 300);
+      }, 200);
 
       return () => {
         cancelled = true;
         if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+        // Terminate worker on cancel to stop computation immediately
+        if (aiWorkerRef.current) {
+          aiWorkerRef.current.terminate();
+          aiWorkerRef.current = null;
+        }
       };
     }
-  }, [gameMode, currentPlayer, gameOver, promotionSquare, getAiMove, makeMove, playerColor]);
+  }, [gameMode, currentPlayer, gameOver, promotionSquare, makeMove, playerColor, board, castlingRights, enPassantSquare, aiDifficulty]);
 
   // Check if a square is part of a pre-move
   const isPreMoveSquare = (row, col) => {
@@ -1084,14 +1021,14 @@ const Chess = () => {
                     onClick={() => handleSquareClick(actualRowIndex, actualColIndex)}
                   >
                     {piece !== 0 && (
-                      <motion.span
+                      <motion.img
+                        src={PIECE_IMAGES[piece]}
+                        alt=""
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className={isWhite(piece) ? 'text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-gray-900'}
-                        style={{ textShadow: isWhite(piece) ? '0 0 3px #000' : 'none' }}
-                      >
-                        {PIECE_SYMBOLS[piece]}
-                      </motion.span>
+                        className="w-8 h-8 sm:w-11 sm:h-11 pointer-events-none select-none"
+                        draggable={false}
+                      />
                     )}
 
                     {/* Valid move indicator */}
@@ -1113,21 +1050,22 @@ const Chess = () => {
 
           {/* Promotion dialog */}
           {promotionSquare && (
-          <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-10">
             <div className="bg-surface p-4 rounded-lg">
               <p className="text-center mb-2">Choose promotion:</p>
               <div className="flex gap-2">
-                {['Q', 'R', 'B', 'N'].map(p => (
-                  <button
-                    key={p}
-                    onClick={() => handlePromotion(p)}
-                    className="btn bg-gray-600 hover:bg-gray-500 text-3xl w-12 h-12"
-                  >
-                    {currentPlayer === 'white' ?
-                      PIECE_SYMBOLS[PIECES[`w${p}`]] :
-                      PIECE_SYMBOLS[PIECES[`b${p}`]]}
-                  </button>
-                ))}
+                {['Q', 'R', 'B', 'N'].map(p => {
+                  const pieceKey = `${currentPlayer === 'white' ? 'w' : 'b'}${p}`;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => handlePromotion(p)}
+                      className="btn bg-gray-600 hover:bg-gray-500 w-14 h-14 flex items-center justify-center"
+                    >
+                      <img src={PIECE_IMAGES[PIECES[pieceKey]]} alt={p} className="w-10 h-10" />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1143,7 +1081,16 @@ const Chess = () => {
 
         {/* Notation Sidebar - right pane */}
         <div className={`bg-surface rounded-lg p-3 w-40 sm:w-48 flex-shrink-0 hidden sm:block ${showNotation ? '' : 'invisible'}`}>
-            <div className="text-white font-semibold mb-2 text-sm">Moves</div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-white font-semibold text-sm">Moves</span>
+              <button
+                onClick={copyFen}
+                className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+                title="Copy FEN to clipboard"
+              >
+                {fenCopied ? 'Copied!' : 'FEN'}
+              </button>
+            </div>
             <div
               ref={notationRef}
               className="max-h-64 sm:max-h-80 overflow-y-auto text-sm font-mono"
