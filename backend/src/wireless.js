@@ -1,6 +1,8 @@
 /**
  * WebSocket handler for wireless 2-player games
  * Supports multiple rooms with 4-digit pin codes
+ *
+ * Set WS_DEBUG=1 env var for verbose logging.
  */
 
 const WebSocket = require('ws');
@@ -9,6 +11,20 @@ const WebSocket = require('ws');
 const rooms = new Map();
 
 const ROOM_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+const debugEnabled = process.env.WS_DEBUG === '1';
+
+// Logging helper — errors/warns always log, debug only when WS_DEBUG=1
+function wsLog(level, msg, data) {
+  const prefix = `[WS ${level}]`;
+  if (level === 'ERROR') {
+    console.error(prefix, msg, data !== undefined ? data : '');
+  } else if (level === 'WARN') {
+    console.warn(prefix, msg, data !== undefined ? data : '');
+  } else if (debugEnabled) {
+    console.log(prefix, msg, data !== undefined ? data : '');
+  }
+}
 
 // Generate a random 4-digit room code
 function generateRoomCode() {
@@ -23,6 +39,8 @@ function generateRoomCode() {
 function cleanupRoom(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
+
+  wsLog('INFO', 'room cleanup', { roomCode });
 
   if (room.player1?.readyState === WebSocket.OPEN) {
     room.player1.close();
@@ -45,11 +63,14 @@ function resetRoomTimer(roomCode) {
   room.cleanupTimer = setTimeout(() => cleanupRoom(roomCode), ROOM_TIMEOUT);
 }
 
-// Send JSON message
+// Send JSON message — returns true if sent, false otherwise
 function send(ws, type, data = {}) {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type, ...data }));
+    return true;
   }
+  wsLog('WARN', 'send failed - ws not open', { type, readyState: ws?.readyState });
+  return false;
 }
 
 // Get opponent in a room
@@ -68,7 +89,7 @@ function handleMessage(ws, message) {
   try {
     msg = JSON.parse(message);
   } catch (e) {
-    console.error('WebSocket: Failed to parse message:', message);
+    wsLog('ERROR', 'failed to parse message', { message });
     return;
   }
 
@@ -90,6 +111,8 @@ function handleMessage(ws, message) {
       ws.roomCode = roomCode;
       ws.playerNum = 1;
 
+      wsLog('INFO', 'room created', { roomCode, gameType: room.gameType });
+
       resetRoomTimer(roomCode);
       send(ws, 'roomCreated', { roomCode });
       break;
@@ -107,17 +130,20 @@ function handleMessage(ws, message) {
       const room = rooms.get(roomCode);
 
       if (!room) {
+        wsLog('WARN', 'join failed - room not found', { roomCode });
         send(ws, 'error', { message: 'Room not found' });
         return;
       }
 
       if (room.player2) {
+        wsLog('WARN', 'join failed - room full', { roomCode });
         send(ws, 'error', { message: 'Room is full' });
         return;
       }
 
       // Validate game type matches
       if (joiningGameType && room.gameType && joiningGameType !== room.gameType) {
+        wsLog('WARN', 'join failed - game type mismatch', { roomCode, expected: room.gameType, got: joiningGameType });
         send(ws, 'error', { message: `Wrong game. This room is for ${room.gameType}` });
         return;
       }
@@ -128,6 +154,8 @@ function handleMessage(ws, message) {
       ws.playerNum = 2;
       ws.gameType = joiningGameType;
 
+      wsLog('INFO', 'player joined', { roomCode, gameType: room.gameType });
+
       // Notify both players
       send(room.player1, 'connected', { playerNum: 1, roomCode, gameType: room.gameType });
       send(room.player2, 'connected', { playerNum: 2, roomCode, gameType: room.gameType });
@@ -137,7 +165,13 @@ function handleMessage(ws, message) {
     case 'move': {
       const opponent = getOpponent(ws);
       if (opponent) {
-        send(opponent, 'move', { data: msg.data, from: ws.playerNum });
+        wsLog('INFO', 'relay move', { roomCode: ws.roomCode, from: ws.playerNum });
+        const relayed = send(opponent, 'move', { data: msg.data, from: ws.playerNum });
+        if (!relayed) {
+          wsLog('WARN', 'move relay failed - opponent ws not open', { roomCode: ws.roomCode });
+        }
+      } else {
+        wsLog('WARN', 'move relay failed - no opponent', { roomCode: ws.roomCode });
       }
       break;
     }
@@ -145,12 +179,16 @@ function handleMessage(ws, message) {
     case 'state': {
       const opponent = getOpponent(ws);
       if (opponent) {
+        wsLog('INFO', 'relay state', { roomCode: ws.roomCode, from: ws.playerNum });
         send(opponent, 'state', { data: msg.data, from: ws.playerNum });
+      } else {
+        wsLog('WARN', 'state relay failed - no opponent', { roomCode: ws.roomCode });
       }
       break;
     }
 
     case 'leave': {
+      wsLog('INFO', 'player leave', { roomCode: ws.roomCode, playerNum: ws.playerNum });
       handleDisconnect(ws);
       break;
     }
@@ -169,6 +207,8 @@ function handleDisconnect(ws) {
   const roomCode = ws.roomCode;
   const room = rooms.get(roomCode);
   if (!room) return;
+
+  wsLog('INFO', 'player disconnect', { roomCode, playerNum: ws.playerNum });
 
   const opponent = getOpponent(ws);
 
@@ -194,6 +234,7 @@ function initWebSocket(server) {
   const pingInterval = setInterval(() => {
     wss.clients.forEach(ws => {
       if (ws.isAlive === false) {
+        wsLog('INFO', 'terminating dead connection', { roomCode: ws.roomCode });
         handleDisconnect(ws);
         return ws.terminate();
       }
@@ -211,6 +252,7 @@ function initWebSocket(server) {
 
   wss.on('connection', (ws) => {
     ws.isAlive = true;
+    wsLog('INFO', 'new ws connection');
 
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -225,6 +267,7 @@ function initWebSocket(server) {
     });
 
     ws.on('error', () => {
+      wsLog('ERROR', 'ws error', { roomCode: ws.roomCode });
       handleDisconnect(ws);
     });
   });

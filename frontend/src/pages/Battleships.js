@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
 import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
+import WirelessDebugPanel from '../components/WirelessDebugPanel';
+import wl from '../utils/wirelessLogger';
 
 const GRID_SIZE = 10;
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -154,11 +156,13 @@ const Battleships = () => {
 
   // Refs to avoid stale closures in callbacks
   const myGridRef = useRef(myGrid);
+  const myHitsRef = useRef(myHits);
   const gamePhaseRef = useRef(gamePhase);
   const opponentReadyRef = useRef(opponentReady);
 
   // Keep refs in sync
   useEffect(() => { myGridRef.current = myGrid; }, [myGrid]);
+  useEffect(() => { myHitsRef.current = myHits; }, [myHits]);
   useEffect(() => { gamePhaseRef.current = gamePhase; }, [gamePhase]);
   useEffect(() => { opponentReadyRef.current = opponentReady; }, [opponentReady]);
 
@@ -173,47 +177,51 @@ const Battleships = () => {
     if (data.type === 'attack') {
       const { row, col } = data;
       const hit = currentGrid[row][col] !== null;
+      const currentHits = myHitsRef.current;
+
+      wl.recv('attack', { row, col, hit });
 
       // Highlight the incoming attack immediately
       setLastHitReceived({ row, col, hit });
 
-      // Update my hits received and check for loss
-      setMyHits(prev => {
-        const newHits = prev.map(r => [...r]);
-        newHits[row][col] = hit ? 'hit' : 'miss';
+      // Compute sunk/loss OUTSIDE setState using ref
+      const sunkShip = hit ? checkShipSunk(currentGrid, row, col, currentHits) : null;
 
-        // Send result back (do this inside setState to have correct state)
-        const sunkShip = hit ? checkShipSunk(currentGrid, row, col, prev) : null;
-        wireless.sendMove({
-          type: 'attackResult',
-          row,
-          col,
-          hit,
-          sunk: sunkShip
-        });
+      // Build new hits for loss check
+      const newHits = currentHits.map(r => [...r]);
+      newHits[row][col] = hit ? 'hit' : 'miss';
+      const allSunk = hit && checkAllSunk(currentGrid, newHits);
 
-        // Track if my ship was sunk
-        if (sunkShip) {
-          setMySunkShips(prev => [...prev, sunkShip]);
-        }
+      // Pure state update
+      setMyHits(newHits);
 
-        // Check if I lost (count all hits including this one)
-        if (hit && checkAllSunk(currentGrid, newHits)) {
-          setWinner('opponent');
-          setGamePhase('gameover');
-          wireless.sendMove({ type: 'gameOver', winner: 'me' });
-        } else {
-          // Only switch turns on a miss - hits give opponent another turn
-          if (!hit) {
-            setIsMyTurn(true);
-            setMessage('They missed! Your turn!');
-          } else {
-            setMessage(sunkShip ? `They sunk your ${sunkShip}!` : 'They hit your ship!');
-          }
-        }
-
-        return newHits;
+      // Send result back to attacker
+      const result = wireless.sendMove({
+        type: 'attackResult',
+        row, col, hit,
+        sunk: sunkShip
       });
+      wl.send('attackResult', { row, col, hit, sunk: sunkShip, sent: result.sent });
+
+      // Track if my ship was sunk
+      if (sunkShip) {
+        setMySunkShips(prev => [...prev, sunkShip]);
+      }
+
+      // Check if I lost
+      if (allSunk) {
+        setWinner('opponent');
+        setGamePhase('gameover');
+        wireless.sendMove({ type: 'gameOver', winner: 'me' });
+      } else {
+        // Only switch turns on a miss - hits give opponent another turn
+        if (!hit) {
+          setIsMyTurn(true);
+          setMessage('They missed! Your turn!');
+        } else {
+          setMessage(sunkShip ? `They sunk your ${sunkShip}!` : 'They hit your ship!');
+        }
+      }
     } else if (data.type === 'attackResult') {
       const { row, col, hit, sunk } = data;
 
@@ -330,14 +338,21 @@ const Battleships = () => {
     if (!isMyTurn || gamePhase !== 'battle') return;
     if (opponentHits[row][col] !== null) return; // Already attacked
 
-    setIsMyTurn(false);
-    setMessage("Firing...");
-
-    wireless.sendMove({
+    // Send the attack FIRST — only update turn if send succeeded
+    const { sent } = wireless.sendMove({
       type: 'attack',
       row,
       col
     });
+
+    if (sent) {
+      wl.send('attack', { row, col });
+      setIsMyTurn(false);
+      setMessage("Firing...");
+    } else {
+      wl.error('attack send failed', { row, col });
+      setMessage("Send failed — try again");
+    }
   };
 
   // Confirm ship placement
@@ -722,6 +737,8 @@ const Battleships = () => {
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games
       </Link>
+
+      <WirelessDebugPanel />
     </div>
   );
 };

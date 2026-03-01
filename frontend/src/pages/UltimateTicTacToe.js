@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import useWirelessGame from '../hooks/useWirelessGame';
 import { WirelessButton, WirelessModal } from '../components/WirelessModal';
 import { useHelpVisibility, HelpButton } from '../hooks/useHelpVisibility';
+import WirelessDebugPanel from '../components/WirelessDebugPanel';
+import wl from '../utils/wirelessLogger';
 
 const WINNING_COMBINATIONS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
@@ -28,6 +30,12 @@ const UltimateTicTacToe = () => {
   const [aiDifficulty, setAiDifficulty] = useState('medium'); // 'easy', 'medium', 'hard'
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiTimeoutRef = useRef(null);
+
+  // Refs to avoid stale closures in wireless callbacks
+  const boardsRef = useRef(boards);
+  const boardWinnersRef = useRef(boardWinners);
+  useEffect(() => { boardsRef.current = boards; }, [boards]);
+  useEffect(() => { boardWinnersRef.current = boardWinners; }, [boardWinners]);
 
   // Wireless state
   const [showWirelessModal, setShowWirelessModal] = useState(false);
@@ -282,15 +290,18 @@ const UltimateTicTacToe = () => {
     return bestMove;
   }, [getValidMoves, applyMove, checkWinner]);
 
-  // Core move logic - used by both human and AI
+  // Core move logic - reads from refs so it's stable for wireless callbacks
   const executeMove = useCallback((boardIndex, cellIndex, player) => {
-    const newBoards = boards.map(b => [...b]);
+    const curBoards = boardsRef.current;
+    const curWinners = boardWinnersRef.current;
+
+    const newBoards = curBoards.map(b => [...b]);
     newBoards[boardIndex][cellIndex] = player;
     setBoards(newBoards);
     setLastMove({ board: boardIndex, cell: cellIndex });
 
     // Check if this mini board is won
-    const newBoardWinners = [...boardWinners];
+    const newBoardWinners = [...curWinners];
     const boardResult = checkWinner(newBoards[boardIndex]);
     if (boardResult) {
       newBoardWinners[boardIndex] = boardResult.winner;
@@ -319,7 +330,7 @@ const UltimateTicTacToe = () => {
     }
 
     setCurrentPlayer(player === 'X' ? 'O' : 'X');
-  }, [boards, boardWinners, checkWinner]);
+  }, [checkWinner]);
 
   // Store executeMove in ref for wireless callback
   useEffect(() => {
@@ -330,6 +341,7 @@ const UltimateTicTacToe = () => {
   const handleWirelessMove = useCallback((data, from) => {
     if (data.type === 'move' && wirelessMoveRef.current) {
       const { board: boardIdx, cell: cellIdx, player } = data;
+      wl.recv('move', { board: boardIdx, cell: cellIdx, player, from });
       wirelessMoveRef.current(boardIdx, cellIdx, player);
     }
   }, []);
@@ -413,17 +425,22 @@ const UltimateTicTacToe = () => {
     // Block clicks if not my turn in wireless mode
     if (gameMode === 'wireless' && currentPlayer !== mySymbol) return;
 
-    executeMove(boardIndex, cellIndex, currentPlayer);
-
-    // Send move to opponent in wireless mode
+    // In wireless mode, send FIRST — only apply locally if send succeeded
     if (gameMode === 'wireless' && wireless.isConnected) {
-      wireless.sendMove({
+      const { sent } = wireless.sendMove({
         type: 'move',
         board: boardIndex,
         cell: cellIndex,
         player: currentPlayer
       });
+      if (!sent) {
+        wl.error('move send failed', { board: boardIndex, cell: cellIndex });
+        return; // Don't apply locally — avoids desync
+      }
+      wl.send('move', { board: boardIndex, cell: cellIndex, player: currentPlayer });
     }
+
+    executeMove(boardIndex, cellIndex, currentPlayer);
   };
 
   const resetGame = () => {
@@ -692,6 +709,8 @@ const UltimateTicTacToe = () => {
       <Link to="/" className="btn btn-secondary mt-6">
         Back to Games
       </Link>
+
+      <WirelessDebugPanel />
 
       {/* Wireless Modal */}
       <WirelessModal
